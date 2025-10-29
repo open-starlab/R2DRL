@@ -255,4 +255,4 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
-.streamlit/secrets.toml
+.streamlit/secrets.tomlpymarl/src/envs/pymarl/
