@@ -693,6 +693,7 @@ class Robocup2d_Python:
         cycle, = struct.unpack_from('i', self.coach_shm.buf, 1)
         if cycle > self.absolute_cycle:
             self.absolute_cycle = cycle
+            print(f"absolute cycle={self.absolute_cycle}")
 
         # ② floats 区域 (COACH_STATE_FLOAT 个 float)，偏移 = 5
         floats = struct.unpack_from(f'{COACH_STATE_FLOAT}f', self.coach_shm.buf, 5)
@@ -791,6 +792,13 @@ class Robocup2d_Python:
 
     # ========== 环境接口 ==========
     def reset(self):
+
+        # 如果上一局已经把所有进程关掉（_closed=True），这里重启整套 env
+        if getattr(self, "_closed", False):
+            ENV_LOG.info("[Reset] 上一局已结束，重启 server/coach/player/trainer ...")
+            # 这里不会重新分配端口，因为 __init__ 里已经 alloc 好并加了锁
+            self.launch_processes()
+
         # 清内部缓存
         self.last_state = None
         self.last_obs = None
@@ -807,16 +815,16 @@ class Robocup2d_Python:
                 "等待进入 PlayOn 超时。请检查 server/coach/player 是否正常启动（见 ./log/*.log）。"
             )
 
-        # # 6) 等待所有球员的首帧 flag==1
-        # for (team, n), shm in self.shm_refs.items():
-        #     t0 = time.time()
-        #     while True:
-        #         if self._flag(shm) == (0, 1):
-        #             # ENV_LOG.info(f"✅ 首帧 ready: {team}#{n} flag=1")
-        #             break
-        #         if time.time() - t0 > 20.0:
-        #             raise TimeoutError(f"[ERROR] 首帧未准备好: {team}#{n} flag仍为{self._flag(shm)}")
-        #         time.sleep(0.01)
+        # 6) 等待所有球员的首帧 flag==1
+        for (team, n), shm in self.shm_refs.items():
+            t0 = time.time()
+            while True:
+                if self._flag(shm) == (0, 1):
+                    # ENV_LOG.info(f"✅ 首帧 ready: {team}#{n} flag=1")
+                    break
+                if time.time() - t0 > 20.0:
+                    raise TimeoutError(f"[ERROR] 首帧未准备好: {team}#{n} flag仍为{self._flag(shm)}")
+                time.sleep(0.01)
         
 
         return
@@ -1103,6 +1111,9 @@ class Robocup2d_Python:
                 print("[Done] Time out.")
             else:
                 self.done = 0 
+        if self.done and not getattr(self, "_closed", False):
+            # 不释放端口锁，只杀进程 + 清 shm
+            self.close(release_port_locks=False)
 
         return float(reward), bool(self.done), {"episode_limit": float(timeout)}
 
@@ -1198,7 +1209,7 @@ class Robocup2d_Python:
             "n_actions": self._n_actions_by_mode(self.m1),
             "state_shape": COACH_STATE_FLOAT,
             "obs_shape": STATE_NUM,
-            "episode_limit": 6000,
+            "episode_limit": self.episode_limit,
         }
     def save_replay(self):
         ENV_LOG.info("Replay not supported for this environment.")
