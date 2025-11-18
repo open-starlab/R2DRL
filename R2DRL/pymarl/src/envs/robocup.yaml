@@ -1,0 +1,34 @@
+env: robocup
+env_args:
+  n1: 11
+  n2: 11
+  m1: Base
+  m2: Helios
+  episode_limit: 6000
+  seed: 123
+
+  host: "localhost"
+
+  player_dir: "/fsws1/h_qin/robocup/robocup/helios-base/src/player"
+  player_exe: "./sample_player"
+  coach_dir:  "/fsws1/h_qin/robocup/robocup/helios-base/src/coach"
+  coach_exe:  "./sample_coach"
+  server_path: "/fsws1/h_qin/robocup/robocup/rcssserver/build/rcssserver"
+  trainer_dir: "/fsws1/h_qin/robocup/robocup/helios-base/src/trainer"
+  trainer_exe: "./sample_trainer"
+  logs_dir: "./log"
+  coach_port_offset: 2
+  debug_port_offset: 8
+  trainer_port_offset: 1
+  auto_port_start: 6000
+  auto_port_end: 7000
+  auto_port_step: 9
+  aggressive_kill: false
+  lib_paths:
+    - "/fsws1/h_qin/libs"
+    - "/fsws1/h_qin/hfo/protobuf-3.6.1/install/lib"
+    - "/home/h_qin/local/lib"
+    - "/home/h_qin/.local/lib"
+
+  goal_x: 52.5
+  goal_y: 7.01
