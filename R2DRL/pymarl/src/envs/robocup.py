@@ -693,7 +693,6 @@ class Robocup2d_Python:
         cycle, = struct.unpack_from('i', self.coach_shm.buf, 1)
         if cycle > self.absolute_cycle:
             self.absolute_cycle = cycle
-            print(f"absolute cycle={self.absolute_cycle}")
 
         # ② floats 区域 (COACH_STATE_FLOAT 个 float)，偏移 = 5
         floats = struct.unpack_from(f'{COACH_STATE_FLOAT}f', self.coach_shm.buf, 5)
