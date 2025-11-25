@@ -297,7 +297,7 @@ class Robocup2d_Python:
     def _launch_player_process(self, team, n, mode="Helios"):
         mode = _norm_mode(mode)
         shm_name = self._get_shm_name(team, n)
-        print(f"shm_name={shm_name}")
+        # print(f"shm_name={shm_name}")
 
 
         args = [
@@ -476,7 +476,7 @@ class Robocup2d_Python:
             "--server::synch_see_offset=60",
             "--server::simulator_step=100",
             "--server::send_step=100",
-            f"--server::half_time={self.episode_limit}",
+            # f"--server::half_time=10",
             f"--server::game_log_dir={self.rcg_dir}",
             f"--server::text_log_dir={self.rcg_dir}",
             "--server::text_logging=false", 
@@ -535,7 +535,7 @@ class Robocup2d_Python:
                 if shm.size != expected_size:
                     shm.close()
                     raise RuntimeError(f"shm {name} size mismatch: got {shm.size}, expected {expected_size}")
-                ENV_LOG.info(f"✅ 成功 attach shm: {name}, size={shm.size}")
+                # ENV_LOG.info(f"✅ 成功 attach shm: {name}, size={shm.size}")
                 return shm
             except FileNotFoundError as e:
                 last_err = e
@@ -662,6 +662,10 @@ class Robocup2d_Python:
             if (abs(ball[0]) >= self.GOAL_X and abs(ball[1]) <= self.GOAL_Y):
                 # print("被进球")
                 return
+            
+            if gm == 1:
+                ENV_LOG.info("[WAIT] gm=TimeOver(1)，提前返回给 step()")
+                return
 
             if gm != 2:  # 非PlayOn但不在终止集合（例如 SetPlay）
                 time.sleep(0.05)
@@ -693,7 +697,7 @@ class Robocup2d_Python:
         cycle, = struct.unpack_from('i', self.coach_shm.buf, 1)
         if cycle > self.absolute_cycle:
             self.absolute_cycle = cycle
-            print(f"absolute cycle={self.absolute_cycle}")
+            # print(f"absolute cycle={self.absolute_cycle}")
 
         # ② floats 区域 (COACH_STATE_FLOAT 个 float)，偏移 = 5
         floats = struct.unpack_from(f'{COACH_STATE_FLOAT}f', self.coach_shm.buf, 5)
@@ -896,6 +900,7 @@ class Robocup2d_Python:
         alive = []
         dead  = []
 
+        # 先分类 alive / dead
         for p in self.all_processes:
             try:
                 rc = p.poll()
@@ -911,43 +916,52 @@ class Robocup2d_Python:
         # 更新一下当前进程列表（去掉已经死掉的）
         self.all_processes = alive
 
-        if dead:
-            detail_list = []
-            for (p, rc) in dead:
-                # 这是 subprocess.Popen 对象，不是 psutil.Process
-                try:
-                    # 程序名
-                    prog = os.path.basename(str(p.args[0])) if p.args else "<??>"
-                except Exception:
-                    prog = "<??>"
-                try:
-                    # 完整命令行
-                    cmdline = " ".join(map(str, p.args)) if p.args else "<no-args>"
-                except Exception:
-                    cmdline = "<no-args>"
+        # 如果没有死进程，什么也不做
+        if not dead:
+            return
 
-                detail_list.append(
-                    f"pid={p.pid}, rc={rc}, prog={prog}, cmd=\"{cmdline}\""
-                )
+        # ===== 打印「所有」子进程状态快照 =====
+        snapshot_lines = []
 
-            detail_str = " ; ".join(detail_list)
-
-            # 日志里也打一份
-            ENV_LOG.info(f"[watchdog] 子进程异常退出({where}): {detail_str}")
-
-            # 一旦发现有挂的，直接把全家干掉
+        def _desc_proc(p, rc):
             try:
-                self.close(release_port_locks=True)
+                prog = os.path.basename(str(p.args[0])) if p.args else "<??>"
             except Exception:
-                # 这里别让异常再炸掉，看门狗只负责兜底
-                pass
+                prog = "<??>"
+            try:
+                cmdline = " ".join(map(str, p.args)) if p.args else "<no-args>"
+            except Exception:
+                cmdline = "<no-args>"
 
-            # 告诉上层这局 env 已经废了（附带详细信息）
-            raise RuntimeError(
-                f"Robocup2d_Python: 子进程在 {where} 阶段异常退出，环境已自动关闭。"
-                f" 详细信息: {detail_str}"
-            )
+            if rc is None:
+                status = "alive"
+            else:
+                status = f"dead rc={rc}"
 
+            return f"pid={p.pid}, status={status}, prog={prog}, cmd=\"{cmdline}\""
+
+        # 先 alive，再 dead，方便肉眼看
+        for p in alive:
+            snapshot_lines.append(_desc_proc(p, None))
+        for (p, rc) in dead:
+            snapshot_lines.append(_desc_proc(p, rc))
+
+        snapshot_str = " ; ".join(snapshot_lines)
+
+        ENV_LOG.info(f"[watchdog] 子进程快照({where}): {snapshot_str}")
+
+        # ===== 环境已经坏了，关掉所有进程 =====
+        try:
+            self.close(release_port_locks=True)
+        except Exception:
+            # 这里别让异常再炸掉，看门狗只负责兜底
+            pass
+
+        # 告诉上层这局 env 已经废了（附带详细信息）
+        raise RuntimeError(
+            "Robocup2d_Python: 子进程在 {} 阶段异常退出，环境已自动关闭。"
+            " 详细信息: {}".format(where, snapshot_str)
+        )
 
     def _can_bind_all(self, port: int, check_ipv6: bool = True) -> bool:
         families = [("0.0.0.0", socket.AF_INET)]
@@ -1106,15 +1120,19 @@ class Robocup2d_Python:
                 print("[Done] Conceded.")
         else:
             reward = 0.0
-            if timeout :
+            if game_mode == 1:
                 self.done = 1
-                print("[Done] Time out.")
+                print("[Done] Timeover.")
+            elif timeout :
+                self.done = 1
+                print("[Done] Episode Limited.")
             else:
                 self.done = 0 
-        if self.done and not getattr(self, "_closed", False):
+        if (timeout or game_mode == 1) and not getattr(self, "_closed", False):
             # 不释放端口锁，只杀进程 + 清 shm
             self.close(release_port_locks=False)
-
+            print(f"cycle = {cycle-self.begin_cycle},done={self.done},timeout={timeout}")
+        
         return float(reward), bool(self.done), {"episode_limit": float(timeout)}
 
     def get_obs(self):
@@ -1230,14 +1248,14 @@ class Robocup2d_Python:
         t0 = time.time()
         last_gm = None
         while time.time() - t0 < timeout:
-            cycle, _, _, gm = self.read_coach_state()
+            cycle, ball, players, gm = self.read_coach_state()
             if gm != last_gm:
                 last_gm = gm
             if gm == 2:  # PlayOn
                 self.begin_cycle=cycle
+                print(f"[PlayOn]ball={ball}, players={players}")
                 return True
             time.sleep(poll)
-            
         return False
 
     def get_avail_agent_actions(self, agent_id):

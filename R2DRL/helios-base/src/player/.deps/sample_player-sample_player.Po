@@ -1,9 +1,5 @@
 sample_player-sample_player.o: sample_player.cpp \
- /usr/include/stdc-predef.h ../../config.h sample_player.h \
- ../../src/player/planner/action_generator.h /usr/include/c++/11/memory \
- /usr/include/c++/11/bits/stl_algobase.h \
- /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
- /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
+ /usr/include/stdc-predef.h ../../config.h /usr/include/errno.h \
  /usr/include/features.h /usr/include/features-time64.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
  /usr/include/x86_64-linux-gnu/bits/timesize.h \
@@ -11,6 +7,14 @@ sample_player-sample_player.o: sample_player.cpp \
  /usr/include/x86_64-linux-gnu/bits/long-double.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+ /usr/include/x86_64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/include/x86_64-linux-gnu/asm/errno.h \
+ /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/include/x86_64-linux-gnu/bits/types/error_t.h sample_player.h \
+ ../../src/player/planner/action_generator.h /usr/include/c++/11/memory \
+ /usr/include/c++/11/bits/stl_algobase.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/cpu_defines.h \
  /usr/include/c++/11/pstl/pstl_config.h \
  /usr/include/c++/11/bits/functexcept.h \
@@ -168,10 +172,6 @@ sample_player-sample_player.o: sample_player.cpp \
  /usr/include/x86_64-linux-gnu/bits/stdio_lim.h \
  /usr/include/x86_64-linux-gnu/bits/stdio.h \
  /usr/include/x86_64-linux-gnu/bits/stdio2.h /usr/include/c++/11/cerrno \
- /usr/include/errno.h /usr/include/x86_64-linux-gnu/bits/errno.h \
- /usr/include/linux/errno.h /usr/include/x86_64-linux-gnu/asm/errno.h \
- /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
- /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/11/bits/charconv.h \
  /usr/include/c++/11/bits/basic_string.tcc \
  /usr/include/c++/11/bits/locale_classes.tcc \
@@ -431,12 +431,7 @@ sample_player-sample_player.o: sample_player.cpp \
  /usr/include/boost/smart_ptr/scoped_ptr.hpp
 /usr/include/stdc-predef.h:
 ../../config.h:
-sample_player.h:
-../../src/player/planner/action_generator.h:
-/usr/include/c++/11/memory:
-/usr/include/c++/11/bits/stl_algobase.h:
-/usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h:
-/usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h:
+/usr/include/errno.h:
 /usr/include/features.h:
 /usr/include/features-time64.h:
 /usr/include/x86_64-linux-gnu/bits/wordsize.h:
@@ -445,6 +440,18 @@ sample_player.h:
 /usr/include/x86_64-linux-gnu/bits/long-double.h:
 /usr/include/x86_64-linux-gnu/gnu/stubs.h:
 /usr/include/x86_64-linux-gnu/gnu/stubs-64.h:
+/usr/include/x86_64-linux-gnu/bits/errno.h:
+/usr/include/linux/errno.h:
+/usr/include/x86_64-linux-gnu/asm/errno.h:
+/usr/include/asm-generic/errno.h:
+/usr/include/asm-generic/errno-base.h:
+/usr/include/x86_64-linux-gnu/bits/types/error_t.h:
+sample_player.h:
+../../src/player/planner/action_generator.h:
+/usr/include/c++/11/memory:
+/usr/include/c++/11/bits/stl_algobase.h:
+/usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h:
+/usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h:
 /usr/include/x86_64-linux-gnu/c++/11/bits/cpu_defines.h:
 /usr/include/c++/11/pstl/pstl_config.h:
 /usr/include/c++/11/bits/functexcept.h:
@@ -635,13 +642,6 @@ sample_player.h:
 /usr/include/x86_64-linux-gnu/bits/stdio.h:
 /usr/include/x86_64-linux-gnu/bits/stdio2.h:
 /usr/include/c++/11/cerrno:
-/usr/include/errno.h:
-/usr/include/x86_64-linux-gnu/bits/errno.h:
-/usr/include/linux/errno.h:
-/usr/include/x86_64-linux-gnu/asm/errno.h:
-/usr/include/asm-generic/errno.h:
-/usr/include/asm-generic/errno-base.h:
-/usr/include/x86_64-linux-gnu/bits/types/error_t.h:
 /usr/include/c++/11/bits/charconv.h:
 /usr/include/c++/11/bits/basic_string.tcc:
 /usr/include/c++/11/bits/locale_classes.tcc:

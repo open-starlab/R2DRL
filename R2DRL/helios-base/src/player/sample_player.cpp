@@ -27,6 +27,7 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+#include <errno.h>
 
 #include "sample_player.h"
 
@@ -189,28 +190,30 @@ SamplePlayer::~SamplePlayer()
 bool
 SamplePlayer::initImpl( CmdLineParser & cmd_parser )
 {
-    bool result = PlayerAgent::initImpl( cmd_parser );
+    std::cerr << "[SamplePlayer::initImpl] START" << std::endl;
 
+    bool result = PlayerAgent::initImpl( cmd_parser );
 
     // read additional options
     result &= Strategy::instance().init( cmd_parser );
 
-    // ✅ 正确：先定义 ParamMap，再 add 参数
+    // ✅ 定义 ParamMap，再 add 参数
     rcsc::ParamMap my_params( "Additional options" );
     my_params.add()
-        ("shm-name", "", &SHM_NAME, "shared memory name")
-        ("mode", "Helios", &RUN_MODE_, "run mode: Base|Helios|Hybrid");
+        ( "shm-name", "",       &SHM_NAME,   "shared memory name" )
+        ( "mode",     "Helios", &RUN_MODE_,  "run mode: Base|Helios|Hybrid" );
 
-    // ✅ 然后解析
+    // ✅ 解析附加参数
     cmd_parser.parse( my_params );
 
-        // ✅ 一次性归一化并映射到枚举（只做一次）
+    // ✅ 归一化 RUN_MODE_ → mode_
     std::string m = RUN_MODE_;
-    std::transform(m.begin(), m.end(), m.begin(),
-                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
-    if (m == "base")       mode_ = Mode::Base;
-    else if (m == "hybrid")mode_ = Mode::Hybrid;
-    else                   mode_ = Mode::Helios;  // 默认/兜底
+    std::transform( m.begin(), m.end(), m.begin(),
+                    []( unsigned char c ){ return static_cast<char>( std::tolower( c ) ); } );
+
+    if ( m == "base" )        mode_ = Mode::Base;
+    else if ( m == "hybrid" ) mode_ = Mode::Hybrid;
+    else                      mode_ = Mode::Helios;  // 默认兜底
 
     if ( cmd_parser.count( "help" ) > 0 )
     {
@@ -227,6 +230,7 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
 
     if ( ! result )
     {
+        std::cerr << "[SamplePlayer::initImpl] PlayerAgent::initImpl / Strategy::init failed" << std::endl;
         return false;
     }
 
@@ -241,20 +245,44 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
         std::cerr << "Loaded the kick table: [" << config().configDir() << "/kick-table]" << std::endl;
     }
 
-    std::cerr << "[SamplePlayer] 使用共享内存名: " << SHM_NAME << std::endl;
+    // ======== 关键信息日志 ========
+    std::cerr << "[SamplePlayer::initImpl] team=" << config().teamName()
+              << " RUN_MODE_=" << RUN_MODE_
+              << " normalized_mode=" << ( mode_ == Mode::Base ? "Base"
+                                       : mode_ == Mode::Hybrid ? "Hybrid"
+                                       : "Helios" )
+              << " SHM_NAME=\"" << SHM_NAME << "\""
+              << std::endl;
 
-    if (mode_ == Mode::Base || mode_ == Mode::Hybrid ) {
-        if (!initSharedMemory()) 
+    // ======== 共享内存相关 ========
+    if ( mode_ == Mode::Base || mode_ == Mode::Hybrid )
+    {
+        if ( SHM_NAME.empty() )
+        {
+            std::cerr << "[SamplePlayer::initImpl][ERROR] Mode=Base/Hybrid 但 SHM_NAME 为空！"
+                      << " 这是 Python 那边没传 --shm-name 的典型情况。" << std::endl;
+            return false;
+        }
+
+        std::cerr << "[SamplePlayer] 使用共享内存名: " << SHM_NAME << std::endl;
+
+        if ( ! initSharedMemory() )
         {
             std::cerr << "***ERROR*** 无法初始化共享内存" << std::endl;
             return false;
         }
 
-        std::cerr << "初始化共享内存成功" << std::endl;
-        return true;
+        std::cerr << "[SamplePlayer::initImpl] 初始化共享内存成功" << std::endl;
     }
-    return true; 
+    else
+    {
+        std::cerr << "[SamplePlayer::initImpl] Helios mode, 不使用共享内存 (忽略 SHM_NAME)" << std::endl;
+    }
+
+    std::cerr << "[SamplePlayer::initImpl] DONE" << std::endl;
+    return true;
 }
+
 
 // ------- 小工具：算“球相对身体”的角度（度） -------
 static inline double relDirToBallDeg(const rcsc::WorldModel & wm){
@@ -325,17 +353,32 @@ bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
 
 void SamplePlayer::writeHybridMaskToSharedMemory()
 {
-    if (!shm_ptr) return;
+    if (!shm_ptr) {
+            std::cerr << "[Hybrid][SHM][WARN] writeHybridMaskToSharedMemory(): shm_ptr null"
+                  << " cycle=" << world().time().cycle()
+                  << std::endl;
+    return;
+    }
     auto* base         = static_cast<uint8_t*>(shm_ptr);
     uint8_t* hy_mask   = base + OFFSET_HYBRID_MASK;
 
     const auto m = getHybridActionMask();
     for (int i = 0; i < 4; ++i) hy_mask[i] = static_cast<uint8_t>(m[i]);
+    std::cerr << "[Hybrid][SHM][WRITE_MASK] cycle=" << world().time().cycle()
+              << " mask={" << int(hy_mask[0]) << "," << int(hy_mask[1]) << ","
+              << int(hy_mask[2]) << "," << int(hy_mask[3]) << "}"
+              << " OFFSET_HYBRID_MASK=" << OFFSET_HYBRID_MASK
+              << std::endl;
 }
 
 bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1, int timeout_ms)
 {
-    if (!shm_ptr) throw std::runtime_error("shm_ptr null (hybrid)");
+    if (!shm_ptr) {
+        std::cerr << "[Hybrid][SHM][FATAL] readHybridActionFromSharedMemory(): shm_ptr null"
+                  << " cycle=" << world().time().cycle()
+                  << std::endl;
+        throw std::runtime_error("shm_ptr null (hybrid)");
+    }
 
     auto* base                 = static_cast<uint8_t*>(shm_ptr);
     volatile uint8_t* flag_A   = base + OFFSET_FLAG_A;
@@ -347,18 +390,42 @@ bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1
 
     const int my_cycle = world().time().cycle();
 
+    std::cerr << "[Hybrid][SHM][READ] enter. cycle=" << my_cycle
+              << " flag_A=" << int(*flag_A)
+              << " flag_B=" << int(*flag_B)
+              << " shm_cycle=" << *shm_cycle
+              << " OFFSET_FLAG_A=" << OFFSET_FLAG_A
+              << " OFFSET_FLAG_B=" << OFFSET_FLAG_B
+              << " OFFSET_HYBRID_ACT=" << OFFSET_HYBRID_ACT
+              << " OFFSET_HYBRID_U0=" << OFFSET_HYBRID_U0
+              << " OFFSET_HYBRID_U1=" << OFFSET_HYBRID_U1
+              << std::endl;
+
     // 和 Base 的握手保持一致：等待 Python 写完 (A==1,B==0)
     const auto start = std::chrono::steady_clock::now();
     const auto TO    = std::chrono::milliseconds(timeout_ms);
+    int loop_cnt = 0;
+
     while (!(*flag_A == 1 && *flag_B == 0)) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
+        ++loop_cnt;
+        if (loop_cnt % 10000 == 0) {
+            std::cerr << "[Hybrid][SHM][WAIT] cycle=" << my_cycle
+                      << " loop=" << loop_cnt
+                      << " flag_A=" << int(*flag_A)
+                      << " flag_B=" << int(*flag_B)
+                      << " shm_cycle=" << *shm_cycle
+                      << std::endl;
+        }
         if (std::chrono::steady_clock::now() - start > TO) {
             std::ostringstream oss;
             oss << "[Hybrid] wait action timeout at cycle=" << my_cycle
                 << " flag_A=" << int(*flag_A)
                 << " flag_B=" << int(*flag_B)
                 << " shm_cycle=" << *shm_cycle;
-            std::cerr << oss.str() << std::endl;
+            std::cerr << oss.str() << std::endl;  
+            std::cerr << "[Hybrid][SHM][TIMEOUT] " << oss.str() << std::endl;      
+            dlog.addText(Logger::TEAM,"[Hybrid][ERROR] ... wait action timeout");
             return false; // 超时：让上层去兜底（随机/本地策略）
         }
     }
@@ -368,17 +435,25 @@ bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1
     a  = *shm_hybrid_action;
     u0 = *shm_u0;
     u1 = *shm_u1;
-
+    std::cerr << "[Hybrid][SHM][READ] done. cycle=" << my_cycle
+              << " a=" << a << " u0=" << u0 << " u1=" << u1
+              << " raw_flag_A=" << int(*flag_A)
+              << " raw_flag_B=" << int(*flag_B)
+              << " shm_cycle=" << *shm_cycle
+              << std::endl;
     // 保护：a 合法、u0/u1 合法
     if (a < 0 || a > 3) {
-        std::cerr << "[Hybrid] invalid action a=" << a << " (expect 0..3)\n";
+        std::cerr << "[Hybrid][SHM][ERROR] invalid action a=" << a << std::endl;
+        dlog.addText(Logger::TEAM,
+             "[Hybrid][ERROR] ... invalid action");
         return false;
     }
     // 你当前实现假设 u0/u1 ∈ [0,1]，这里做截断
     auto clamp01 = [](float x){ return std::max(0.0f, std::min(1.0f, x)); };
     u0 = clamp01(u0);
     u1 = clamp01(u1);
-
+    std::cerr << "[Hybrid][SHM][READ] clamped. a=" << a
+              << " u0=" << u0 << " u1=" << u1 << std::endl;
     return true;
 }
 
@@ -388,10 +463,12 @@ void SamplePlayer::writeSharedMemory()
         std::cerr << "[FATAL] writeSharedMemory(): shm_ptr == nullptr! "
                   << "Shared memory not initialized or unmapped."
                   << std::endl;
+        dlog.addText(Logger::TEAM,
+            "[Hybrid][ERROR] ... invalid action");      
         throw std::runtime_error("shm_ptr is null — shared memory write aborted");
     }
 
-    
+    const int my_cycle = world().time().cycle(); 
 
     // 指针区
     auto* base = static_cast<uint8_t*>(shm_ptr);
@@ -402,22 +479,40 @@ void SamplePlayer::writeSharedMemory()
     float*    shm_state = reinterpret_cast<float*>(base + OFFSET_STATE);
     int32_t*  shm_action= reinterpret_cast<int32_t*>(base + OFFSET_ACTION);
 
+    std::cerr << "[SHM][WRITE] cycle=" << my_cycle
+              << " base=" << static_cast<void*>(base)
+              << " flag_A=" << int(*flag_A)
+              << " flag_B=" << int(*flag_B)
+              << " OFFSET_MASK=" << OFFSET_MASK
+              << " OFFSET_STATE=" << OFFSET_STATE
+              << " OFFSET_ACTION=" << OFFSET_ACTION
+              << std::endl;
     // 1) 写 mask
     const auto& mask = getActionMask();
     for (int i = 0; i < BASE_ACTION_NUM; ++i) {
         shm_mask[i] = static_cast<uint8_t>(mask[i] ? 1 : 0);
     }
+    std::cerr << "[SHM][WRITE] mask[0..min(16,BASE_ACTION_NUM-1)] =";
+    for (int i = 0; i < std::min(static_cast<int>(BASE_ACTION_NUM), 17); ++i) {
+        std::cerr << " " << int(shm_mask[i]);
+    }
 
+    std::cerr << std::endl;
     // 2) 写 cycle
     const int32_t cycle = static_cast<int32_t>(world().time().cycle());
     *shm_cycle = cycle;
-
+    std::cerr << "[SHM][WRITE] shm_cycle=" << *shm_cycle << std::endl;
     // 3) 写 obs
     const auto state = getAllState();
     for (size_t i = 0; i < state.size(); ++i) {
         shm_state[i] = state[i];
     }
-
+    std::cerr << "[SHM][WRITE] state.size=" << state.size()
+              << " first5=";
+    for (int i = 0; i < 5 && i < (int)state.size(); ++i) {
+        std::cerr << state[i] << " ";
+    }
+    std::cerr << std::endl;
 
 }
 
@@ -469,6 +564,13 @@ SamplePlayer::actionImpl()
 
     if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Base)
     {
+        const int my_cycle = world().time().cycle();
+        std::cerr << "[Base][ACTION] PlayOn + Mode::Base, cycle=" << my_cycle << std::endl;
+
+        if (!shm_ptr) {
+            std::cerr << "[Base][ACTION][FATAL] shm_ptr null at cycle=" << my_cycle << std::endl;
+            throw std::runtime_error("shm_ptr null in Base mode");
+        }
         // === 写入 mask/state 到共享内存 ===
         setActionMask();
         writeSharedMemory();
@@ -477,17 +579,22 @@ SamplePlayer::actionImpl()
         auto* base = static_cast<uint8_t*>(shm_ptr);
         volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
         volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
-
+        std::cerr << "[Base][ACTION] before signal C++->Py, "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << std::endl;
         //  标志位01
         // 通知 Python: 观测已准备好
         std::atomic_thread_fence(std::memory_order_release);
         *flag_A = 0;
         *flag_B = 1;
-
-
-        // 等待 Python 写入动作并清零 flag
+        std::cerr << "[Base][ACTION] after set (A,B)=(0,1), "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << std::endl;
+        // 等待 Python 写入cerr动作并清零 flag
         const int act = getActionFromSharedMemory();
-
+        std::cerr << "[Base][ACTION] got act=" << act << " from shm at cycle=" << my_cycle << std::endl;
         // 执行动作
         takeAction(act);
         //  标志位11
@@ -496,7 +603,10 @@ SamplePlayer::actionImpl()
         *flag_B = 1; 
         // 确保动作执行完毕后同步
         std::atomic_thread_fence(std::memory_order_release);
-
+        std::cerr << "[Base][ACTION] after takeAction, set (A,B)=(1,1), "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << std::endl;
         return; // ✅ PlayOn 模式逻辑结束
     }
 
@@ -504,6 +614,13 @@ SamplePlayer::actionImpl()
     // === 1.5️⃣ Hybrid 模式：严格执行传入动作；任何异常直接报错 ===
     if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Hybrid)
     {
+        const int my_cycle = world().time().cycle();
+        std::cerr << "[Hybrid][ACTION] PlayOn + Mode::Hybrid, cycle=" << my_cycle << std::endl;
+
+        if (!shm_ptr) {
+            std::cerr << "[Hybrid][ACTION][FATAL] shm_ptr null at cycle=" << my_cycle << std::endl;
+            throw std::runtime_error("shm_ptr null in Hybrid mode");
+        }
         // 1) 写 mask/state 到共享内存（包含 17 位全量 mask 与 4 位 hybrid mask）
         setHybridActionMask();
         writeSharedMemory();
@@ -512,12 +629,18 @@ SamplePlayer::actionImpl()
         auto* base = static_cast<uint8_t*>(shm_ptr);
         volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
         volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
-
+        std::cerr << "[Hybrid][ACTION] before signal C++->Py, "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << std::endl;
         // C++->Py: 观测就绪
         std::atomic_thread_fence(std::memory_order_release);
         *flag_A = 0;
         *flag_B = 1;
-
+        std::cerr << "[Hybrid][ACTION] after set (A,B)=(0,1), "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << std::endl;
         // 2) 读取 Python 写回的 Hybrid 动作 & 参数（严格模式）
         int   a   = -1;
         float u0  = 0.5f;
@@ -528,9 +651,11 @@ SamplePlayer::actionImpl()
             std::ostringstream oss;
             oss << "[Hybrid][ERROR] read action timeout/invalid at cycle="
                 << world().time().cycle();
+            std::cerr << "[Hybrid][ACTION][ERROR] " << oss.str() << std::endl;
             throw std::runtime_error(oss.str());
         }
-
+        std::cerr << "[Hybrid][ACTION] got a=" << a << " u0=" << u0 << " u1=" << u1
+                << " at cycle=" << my_cycle << std::endl;
         // 3) 掩码检查：被屏蔽的动作一律报错
         const auto m = getHybridActionMask();
         if (a < 0 || a > 3 || !m[a]) {
@@ -538,6 +663,7 @@ SamplePlayer::actionImpl()
             oss << "[Hybrid][ERROR] action blocked or invalid. a=" << a
                 << " mask={" << int(m[0]) << "," << int(m[1]) << ","
                 << int(m[2]) << "," << int(m[3]) << "}";
+            std::cerr << "[Hybrid][ACTION][ERROR] " << oss.str() << std::endl;
             throw std::runtime_error(oss.str());
         }
 
@@ -548,6 +674,7 @@ SamplePlayer::actionImpl()
                 << " u0=" << u0 << " u1=" << u1
                 << " kickable=" << world().self().isKickable()
                 << " goalie=" << world().self().goalie();
+            std::cerr << "[Hybrid][ACTION][ERROR] " << oss.str() << std::endl;
             throw std::runtime_error(oss.str());
         }
 
@@ -557,14 +684,31 @@ SamplePlayer::actionImpl()
         *flag_A = 1;
         *flag_B = 1;
         std::atomic_thread_fence(std::memory_order_release);
+        std::cerr << "[Hybrid][ACTION] success, set (A,B)=(1,1), "
+                << "flag_A=" << int(*flag_A)
+                << " flag_B=" << int(*flag_B)
+                << " cycle=" << my_cycle
+                << std::endl;
         return;
     }
-
-
 
     // ===========================================================
     // === 2️⃣ 非 PlayOn 模式：完全复原原版 HELIOS 行为系统 ===
     // ===========================================================
+
+    if (shm_ptr) {
+    auto* base = static_cast<uint8_t*>(shm_ptr);
+    volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
+    volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
+    std::cerr << "[ACTION][NonPlayOn] reset flags to (0,0). "
+              << "old flag_A=" << int(*flag_A)
+              << " old_flag_B=" << int(*flag_B)
+              << " cycle=" << world().time().cycle()
+              << std::endl;
+
+    *flag_A = 0;
+    *flag_B = 0;
+    std::atomic_thread_fence(std::memory_order_release);
 
     // Trainer message（原样保留，可无视）
     if (this->audioSensor().trainerMessageTime() == world().time())
@@ -635,33 +779,57 @@ SamplePlayer::actionImpl()
     // 其他 SetPlay（KickOff, Corner, FreeKick 等）
     Bhv_SetPlay().execute(this);
     //check
+    }
 }
 
 // sample_player.cpp
 int SamplePlayer::getActionFromSharedMemory()
 {
-
-    if (!shm_ptr) throw std::runtime_error("shm_ptr null");
+    const int my_cycle = world().time().cycle(); //获取当前cycle
+    if (!shm_ptr) {
+        std::cerr << "[Base][SHM][FATAL] getActionFromSharedMemory(): shm_ptr null"
+            << " cycle=" << my_cycle << std::endl;
+        throw std::runtime_error("shm_ptr null");
+    }
 
     auto* base        = static_cast<uint8_t*>(shm_ptr);
     volatile uint8_t* flag_A = base + OFFSET_FLAG_A;    //动作储存标志
     volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
     auto* shm_cycle   = reinterpret_cast<int32_t*>(base + OFFSET_CYCLE); //当前帧号
     auto* shm_action  = reinterpret_cast<int32_t*>(base + OFFSET_ACTION); //动作
+    
 
-    const int my_cycle = world().time().cycle(); //获取当前cycle
-
+    std::cerr << "[Base][SHM][READ] enter. cycle=" << my_cycle
+              << " flag_A=" << int(*flag_A)
+              << " flag_B=" << int(*flag_B)
+              << " shm_cycle=" << *shm_cycle
+              << " OFFSET_FLAG_A=" << OFFSET_FLAG_A
+              << " OFFSET_FLAG_B=" << OFFSET_FLAG_B
+              << " OFFSET_ACTION=" << OFFSET_ACTION
+              << std::endl;
     // C++ 端等待 Python 写完动作（flag 清零），并且最多等 5000 毫秒（5 秒）。
     const auto start   = std::chrono::steady_clock::now();
     const auto TIMEOUT = std::chrono::milliseconds(50000);
+    int loop_cnt = 0;
     while (!(*flag_A == 1 && *flag_B == 0)) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
+        ++loop_cnt;
+
+        if (loop_cnt % 10000 == 0) {
+            std::cerr << "[Base][SHM][WAIT] cycle=" << my_cycle
+                      << " loop=" << loop_cnt
+                      << " flag_A=" << int(*flag_A)
+                      << " flag_B=" << int(*flag_B)
+                      << " shm_cycle=" << *shm_cycle
+                      << std::endl;
+        }
         if (std::chrono::steady_clock::now() - start > TIMEOUT) {
             std::ostringstream oss;
             oss << "wait action timeout at cycle=" << my_cycle
                 << " flag_A=" << int(*flag_A)
                 << " flag_B=" << int(*flag_B)
                 << " shm_cycle=" << *shm_cycle;
+            std::cerr << "[Base][SHM][TIMEOUT] " << oss.str() << std::endl;
             throw std::runtime_error(oss.str());  // ✅ 允许报错
         }
     }
@@ -669,9 +837,16 @@ int SamplePlayer::getActionFromSharedMemory()
     std::atomic_thread_fence(std::memory_order_acquire);
 
     const int act = *shm_action; //拿出动作并检查
+    std::cerr << "[Base][SHM][READ] done. cycle=" << my_cycle
+              << " act=" << act
+              << " flag_A=" << int(*flag_A)
+              << " flag_B=" << int(*flag_B)
+              << " shm_cycle=" << *shm_cycle
+              << std::endl;
     if (!(0 <= act && act < BASE_ACTION_NUM)) {
         std::ostringstream oss;
         oss << "invalid action value: " << act << " at cycle=" << my_cycle;
+        std::cerr << "[Base][SHM][ERROR] " << oss.str() << std::endl;
         throw std::runtime_error(oss.str());      // ✅ 允许报错
     }
     return act;
@@ -1564,26 +1739,39 @@ void SamplePlayer::setActionMask() {
 
 
 bool SamplePlayer::initSharedMemory() {
+    std::cerr << "[SHM] initSharedMemory() called. "
+              << "SHM_NAME=" << SHM_NAME
+              << " SHM_SIZE=" << SHM_SIZE
+              << std::endl;
     int shm_fd = shm_open(SHM_NAME.c_str(), O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
+        std::cerr << "[SHM][ERROR] shm_open failed. name=" << SHM_NAME
+                  << " errno=" << errno << " (" << strerror(errno) << ")"
+                  << std::endl;
         perror("[SamplePlayer] shm_open 失败");
         return false;
     }
-
+    std::cerr << "[SHM] shm_open success. fd=" << shm_fd << std::endl;
     // 设置共享内存大小
     if (ftruncate(shm_fd, SHM_SIZE) == -1) {
+        std::cerr << "[SHM][ERROR] ftruncate failed. size=" << SHM_SIZE
+                  << " errno=" << errno << " (" << strerror(errno) << ")"
+                  << std::endl;        
         perror("[SamplePlayer] ftruncate 失败");
         close(shm_fd);
         return false;
     }
-
+    std::cerr << "[SHM] ftruncate success." << std::endl;
     shm_ptr = mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm_ptr == MAP_FAILED) {
+        std::cerr << "[SHM][ERROR] mmap failed. errno=" << errno
+                  << " (" << strerror(errno) << ")"
+                  << std::endl;
         perror("[SamplePlayer] mmap 失败");
         shm_ptr = nullptr;
         return false;
     }
-
+    std::cerr << "[SHM] mmap success. shm_ptr=" << shm_ptr << std::endl;
     // ✅ 初始化内存（清零）
     std::memset(shm_ptr, 0, SHM_SIZE);
 
