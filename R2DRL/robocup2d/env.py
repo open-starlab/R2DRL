@@ -71,6 +71,7 @@ class Robocup2dEnv:
         self._closed = False            # close() 里也建议加保护
         self.t0=time.time()
 
+        
         # 子进程环境变量（把 LD_LIBRARY_PATH 配好）
         self.child_env = os.environ.copy()
         lib_paths = self.args.get("lib_paths", [])
@@ -86,7 +87,7 @@ class Robocup2dEnv:
             self.child_env["LD_LIBRARY_PATH"] = base_ld
 
         self.log.info(f"[child_env] LD_LIBRARY_PATH={self.child_env.get('LD_LIBRARY_PATH', '')}")
-
+        self._start_run(where="init")
         
     def get_avail_actions(self):
         if self.done == 1 and self.last_avail_actions is not None:
@@ -135,13 +136,16 @@ class Robocup2dEnv:
         if self._closed:
             raise RuntimeError("env already closed; create a new env instance")
 
-        max_retries = int(self.args.get("reset_retries", 5))  # 没配就默认 2 次
+        max_retries = int(self.args["reset_retries"])
         last_err = None
 
         for attempt in range(max_retries + 1):
             try:
-                # 每次 attempt 都重拉一套（最稳）
-                self._reconnect_run(where=f"reset attempt={attempt}")
+                # 关键：每次 attempt 都先把旧进程清掉（不动 shm/run_id）
+                self._teardown_procs_only()
+                self._clear_shm_all()
+
+                self._start_procs_only(where=f"reset attempt={attempt}")
 
                 # 真正 reset 逻辑
                 self._reset_once_no_reconnect()
@@ -150,32 +154,51 @@ class Robocup2dEnv:
             except Exception as e:
                 last_err = e
                 self.log.warning(f"[reset] attempt={attempt} failed: {e!r}")
-
-                # 失败就彻底拆掉，准备下一次重连
-                try:
-                    self._teardown_run()
-                except Exception:
-                    pass
-
-                # 小睡一下，避免端口/进程组/内核回收抖动（可选）
                 time.sleep(0.2)
 
-        # 所有重试都失败
         raise RuntimeError(f"[reset] failed after {max_retries+1} attempts. last_err={last_err!r}")
 
-    
+    def _clear_shm_all(self, *, clear_players=True, clear_coach=True, clear_trainer=True) -> None:
+        """
+        将已创建/attach 的 shm 缓冲区全部写 0。
+        注意：最好在旧进程已停止后调用（例如 reset 的 _teardown_procs_only 之后）。
+        """
+        def _zero_one(shm_obj, tag: str):
+            if shm_obj is None:
+                return
+            try:
+                buf = shm_obj.buf  # memoryview
+                # 不分配巨大的 bytes；直接用 numpy 覆写
+                arr = np.frombuffer(buf, dtype=np.uint8)
+                arr[:] = 0
+            except Exception as e:
+                self.log.warning(f"[shm_clear] failed: {tag} err={e!r}")
+
+        if clear_coach:
+            for name, shm in getattr(self, "coach_shms", {}).items():
+                _zero_one(shm, f"coach:{name}")
+
+        if clear_trainer:
+            for name, shm in getattr(self, "trainer_shms", {}).items():
+                _zero_one(shm, f"trainer:{name}")
+
+        if clear_players:
+            for name, shm in getattr(self, "player_shms", {}).items():
+                _zero_one(shm, f"player:{name}")
+
+        # 保险：清 Python 侧缓存（可选，但一般顺手一起做）
+        self.begin_cycle = -1
+        self.last_state = None
+        self.last_obs = None
+        self.last_avail_actions = None
+        self.done = 0
+
     def _reset_once_no_reconnect(self):
         # 0) watchdog
-        alive, dead = proc.check_child_processes(self.procs, where="reset")
+        alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect0")
         self.procs = alive
         if dead:
-            detail = []
-            for info, rc in dead:
-                if hasattr(info, "p"):
-                    detail.append(f"[{info.kind}] pid={info.p.pid} rc={rc} log={getattr(info,'log_path','')}")
-                else:
-                    detail.append(f"[proc] pid={info.pid} rc={rc}")
-            raise RuntimeError("[reset] watchdog dead:\n" + "\n".join(detail))
+            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
         # 1) 清缓存/标志
         self.last_state = None
@@ -191,10 +214,11 @@ class Robocup2dEnv:
         # 3) 等 gm==PlayOn(2)
         t_end = time.monotonic() + 20.0
         while time.monotonic() < t_end:
-            alive, dead = proc.check_child_processes(self.procs, where="reset")
+            alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect1")
             self.procs = alive
             if dead:
-                raise RuntimeError("[reset] watchdog dead while waiting PlayOn")
+                raise RuntimeError("[watchdog] child process died:\n" + dead_info)
+
 
             gm = int(P.coach.read_gamemode(cbuf))
             cycle = int(P.coach.read_cycle(cbuf))
@@ -236,23 +260,13 @@ class Robocup2dEnv:
         print("Reset Over!!!")
         return
 
-    def _reconnect_run(self, where: str = "reset") -> None:
-        """
-        负责：
-        - 如有旧 run：teardown
-        - 生成 run_id + lock
-        - 选端口、建 log/rcg 目录
-        - 生成 shm 名字并创建 shm
-        - 拉起 server/players/coach
-        - 收集 pgid/pid
-        - 清空缓存字段（last_state/obs/avail/done/begin_cycle）
-        """
+    def _start_run(self, where: str = "init") -> None:
         if self._closed:
             raise RuntimeError("env already closed; create a new env instance")
 
-        # 旧 run 清理
+        # 启动函数不负责 teardown
         if self.run_id is not None or self.procs or self._shm_names:
-            self._teardown_run()
+            raise RuntimeError("run already started; call _reconnect_run or _teardown_run first")
 
         # run lock
         self.run_id = uuid.uuid4().hex
@@ -270,16 +284,11 @@ class Robocup2dEnv:
         base_logs_dir = os.path.abspath(str(self.args["logs_dir"]))
         self.log_dir = os.path.join(base_logs_dir, self.run_id)
         os.makedirs(self.log_dir, exist_ok=True)
-
         self.rcg_dir = os.path.join(self.log_dir, "rcg")
         os.makedirs(self.rcg_dir, exist_ok=True)
 
-        self.log.info(f"[{where}] log_dir={self.log_dir}")
-        self.log.info(f"[{where}] rcg_dir={self.rcg_dir}")
-
         # 清运行期字段
         self.begin_cycle = -1
-        self.procs = []
         self.last_state = None
         self.last_obs = None
         self.last_avail_actions = None
@@ -307,9 +316,29 @@ class Robocup2dEnv:
             log=self.log,
         )
 
-        # 子进程 env
-        env = self.child_env
+
+
+    def _start_procs_only(self, where: str = "reset") -> None:
+        """
+        负责：
+        - 如有旧 run：teardown
+        - 生成 run_id + lock
+        - 选端口、建 log/rcg 目录
+        - 生成 shm 名字并创建 shm
+        - 拉起 server/players/coach
+        - 收集 pgid/pid
+        - 清空缓存字段（last_state/obs/avail/done/begin_cycle）
+        """
+        env = dict(self.child_env)
         env["ROBOCUP2DRL_RUN_ID"] = self.run_id
+
+        # 清运行期字段
+        self.begin_cycle = -1
+        self.procs = []
+        self.last_state = None
+        self.last_obs = None
+        self.last_avail_actions = None
+        self.done = 0
 
         # server
         p, _ = proc.launch_server(
@@ -383,28 +412,10 @@ class Robocup2dEnv:
         # 0) watchdog
         self.t1=time.time()
         # print(f"[time]{self.t1-self.t0}")
-        alive, dead = proc.check_child_processes(self.procs, where="step")
+        alive, dead, dead_info = proc.check_child_processes(self.procs, where="step0")
         self.procs = alive
         if dead:
-            items = []
-            for info, rc in dead:
-                if hasattr(info, "p"):  # ProcInfo
-                    p = info.p
-                    kind = info.kind
-                    team = getattr(info, "team", "")
-                    unum = getattr(info, "unum", "")
-                    shm = getattr(info, "shm_name", "")
-                    log = getattr(info, "log_path", "")
-                    items.append(
-                        f"[{kind}] pid={p.pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
-                    )
-                else:
-                    # 原始 Popen（server, trainer, coach）
-                    p = info
-                    items.append(f"[server/trainer/coach] pid={p.pid} rc={rc}")
-
-            detail = "\n".join(items)
-            raise RuntimeError(f"[watchdog] child process died during get_state:\n{detail}")
+            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
         # done=1 还 step：保持旧版习惯直接返回
         if self.done == 1:
@@ -499,29 +510,11 @@ class Robocup2dEnv:
             )
             # print("ready_to_act after action submit:", ready_to_act)
             # 0) 看门狗：检查子进程是否都活着
-            alive, dead = proc.check_child_processes(self.procs, where="get_obs")
+            alive, dead, dead_info = proc.check_child_processes(self.procs, where="step1")
             self.procs = alive
-
             if dead:
-                items = []
-                for info, rc in dead:
-                    if hasattr(info, "p"):  # ProcInfo
-                        p = info.p
-                        kind = info.kind
-                        team = getattr(info, "team", "")
-                        unum = getattr(info, "unum", "")
-                        shm = getattr(info, "shm_name", "")
-                        log = getattr(info, "log_path", "")
-                        items.append(
-                            f"[{kind}] pid={p.pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
-                        )
-                    else:
-                        # 原始 Popen（server, trainer, coach）
-                        p = info
-                        items.append(f"[server/trainer/coach] pid={p.pid} rc={rc}")
+                raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-                detail = "\n".join(items)
-                raise RuntimeError(f"[watchdog] child process died during get_state:\n{detail}")
             
             # print("after watchdog check")
             if ready_to_act:
@@ -575,28 +568,11 @@ class Robocup2dEnv:
             return self.last_obs
 
         # 0) 看门狗：检查子进程是否都活着
-        alive, dead = proc.check_child_processes(self.procs, where="get_obs")
+        alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_obs")
         self.procs = alive
         if dead:
-            items = []
-            for info, rc in dead:
-                if hasattr(info, "p"):  # ProcInfo
-                    p = info.p
-                    kind = info.kind
-                    team = getattr(info, "team", "")
-                    unum = getattr(info, "unum", "")
-                    shm = getattr(info, "shm_name", "")
-                    log = getattr(info, "log_path", "")
-                    items.append(
-                        f"[{kind}] pid={p.pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
-                    )
-                else:
-                    # 原始 Popen（server, trainer, coach）
-                    p = info
-                    items.append(f"[server/trainer/coach] pid={p.pid} rc={rc}")
+            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-            detail = "\n".join(items)
-            raise RuntimeError(f"[watchdog] child process died during get_state:\n{detail}")
 
         # keys 稳定顺序（并缓存，避免每步排序开销/顺序抖动）
         keys = getattr(self, "_obs_keys", None)
@@ -643,29 +619,11 @@ class Robocup2dEnv:
         """
 
         # 0) 看门狗：检查子进程是否都活着
-        alive, dead = proc.check_child_processes(self.procs, where="get_state")
+        alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_state")
         self.procs = alive
         if dead:
-            items = []
-            for info, rc in dead:
-                if hasattr(info, "p"):  # ProcInfo
-                    p = info.p
-                    kind = info.kind
-                    team = getattr(info, "team", "")
-                    unum = getattr(info, "unum", "")
-                    shm = getattr(info, "shm_name", "")
-                    log = getattr(info, "log_path", "")
-                    items.append(
-                        f"[{kind}] pid={p.pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
-                    )
-                else:
-                    # 原始 Popen（server, trainer, coach）
-                    p = info
-                    items.append(f"[server/trainer/coach] pid={p.pid} rc={rc}")
+            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-            detail = "\n".join(items)
-            raise RuntimeError(f"[watchdog] child process died during get_state:\n{detail}")
-        
         # 1) done 缓存
         if self.done == 1 and self.last_state is not None:
             return self.last_state
@@ -727,7 +685,64 @@ class Robocup2dEnv:
             "obs_shape": int(P.player.STATE_NUM),           # 97
             "episode_limit": int(self.episode_limit),
         }
-    
+    def _teardown_procs_only(self) -> None:
+        # 0) 重新采样 pgid/pid
+        try:
+            self._collect_run_pgids()
+        except Exception:
+            pass
+
+        def _as_popen(x):
+            return x.p if hasattr(x, "p") else x
+
+        popens = []
+        for item in list(getattr(self, "procs", [])):
+            p = _as_popen(item)
+            if p is not None:
+                popens.append(p)
+
+        # 1) TERM
+        try:
+            self._kill_run_process_groups(signal.SIGTERM)
+        except Exception:
+            pass
+
+        # 2) wait
+        t_end = time.time() + 2.0
+        for p in popens:
+            try:
+                if p.poll() is None:
+                    p.wait(timeout=max(0.0, t_end - time.time()))
+            except Exception:
+                pass
+
+        # 3) KILL
+        try:
+            self._kill_run_process_groups(signal.SIGKILL)
+        except Exception:
+            pass
+
+        # 5) 只清“运行期缓存”，不清 shm/端口/run_id
+        self.procs = []
+        self.begin_cycle = -1
+        self.last_state = None
+        self.last_obs = None
+        self.last_avail_actions = None
+        self.done = 0
+
+        if hasattr(self, "_obs_keys"):
+            delattr(self, "_obs_keys")
+        if hasattr(self, "_act_keys"):
+            delattr(self, "_act_keys")
+        
+        # _teardown_procs_only() 最末尾
+        ports = [self.server_port, self.coach_port, self.trainer_port, self.debug_port]
+        ports = [p for p in ports if p is not None]
+        if ports:
+            ok = proc.wait_ports_free(ports, timeout=10.0, poll=0.05, hold=0.3)
+            if not ok:
+                self.log.warning(f"[teardown] ports still busy after wait: {ports}")
+
     def _teardown_run(self) -> None:
         # 0) 重新采样一次（防止 _run_pgids/_run_pids 为空或过期）
         try:

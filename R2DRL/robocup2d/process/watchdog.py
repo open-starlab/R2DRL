@@ -1,27 +1,46 @@
 from __future__ import annotations
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
-def check_child_processes(processes, where: str = ""):
-    dead = []
-    alive = []
-    
+def check_child_processes(processes, where: str = "") -> Tuple[List[Any], List[Tuple[Any, Any]], str]:
+    """
+    Returns:
+      alive: 存活的 info 列表（保持原对象）
+      dead : [(info, rc), ...]
+      dead_info_str: 已整理好的打印信息（多行字符串）
+    """
+    dead: List[Tuple[Any, Any]] = []
+    alive: List[Any] = []
+
+    lines: List[str] = []
+
     for info in list(processes):
-        # ----------- 支持 ProcInfo / Popen 两种类型 ------------
-        if hasattr(info, "p"):        # ProcInfo
-            p = info.p
-        else:                         # subprocess.Popen
-            p = info
-        
+        p = info.p if hasattr(info, "p") else info
+
         try:
             rc = p.poll()
         except Exception as e:
-            # p 不是 Popen 或 poll() 出错
-            dead.append((info, f"poll_error:{e!r}"))
-            continue
+            rc = f"poll_error:{e!r}"
 
         if rc is None:
             alive.append(info)
-        else:
-            dead.append((info, rc))
+            continue
 
-    return alive, dead
+        dead.append((info, rc))
+
+        pid = getattr(p, "pid", None)
+        if hasattr(info, "p"):  # ProcInfo
+            kind = getattr(info, "kind", "proc")
+            team = getattr(info, "team", "")
+            unum = getattr(info, "unum", "")
+            shm  = getattr(info, "shm_name", "")
+            log  = getattr(info, "log_path", "")
+            lines.append(
+                f"[{where}][{kind}] pid={pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
+            )
+        else:  # 原始 Popen（server/trainer/coach）
+            lines.append(
+                f"[{where}][server/trainer/coach] pid={pid} rc={rc}"
+            )
+
+    dead_info_str = "\n".join(lines)
+    return alive, dead, dead_info_str
