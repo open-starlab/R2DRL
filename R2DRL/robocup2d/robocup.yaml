@@ -32,7 +32,7 @@ env_args:
     - /fsws1/h_qin/hfo/protobuf-3.6.1/install/lib
     - /home/h_qin/.local/lib
 
-  reset_retries: 1
+  reset_retries: 2
 
   goal_x: 52.5
   goal_y: 7.01

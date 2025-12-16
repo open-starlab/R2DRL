@@ -1,10 +1,13 @@
 from __future__ import annotations
 import socket
+import errno
 import time
 from typing import Iterable
+import os
+import fcntl
+from typing import Optional, Tuple
 
 def _bind_addr(host: str, port: int, af: int):
-    # 把 (host, port) 变成 socket.bind() 需要的地址格式。
     if af == socket.AF_INET6:
         return (host, port, 0, 0)
     return (host, port)
@@ -19,19 +22,35 @@ def can_bind_all(port: int, check_ipv6: bool = True) -> bool:
             s = None
             try:
                 s = socket.socket(af, typ)
-                # 探测用：别强行 SO_REUSEADDR，更“严格”
+
+                # 关键：IPv6 探测时尽量避免 v4-mapped 干扰
+                if af == socket.AF_INET6:
+                    try:
+                        s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                    except OSError:
+                        pass
+
                 s.bind(_bind_addr(host, port, af))
-            except (OSError, TypeError):
-                # IPv6 不可用：当作忽略，而不是端口被占
+
+            except TypeError:
+                # IPv6 地址族不可用等情况
                 if af == socket.AF_INET6:
                     continue
                 return False
+
+            except OSError as e:
+                if af == socket.AF_INET6:
+                    # 只忽略“IPv6 不支持/不可用”，不要忽略“被占用”
+                    if e.errno in (errno.EAFNOSUPPORT, errno.EPROTONOSUPPORT, errno.EADDRNOTAVAIL):
+                        continue
+                    return False
+                return False
+
             finally:
                 if s is not None:
-                    try:
-                        s.close()
-                    except Exception:
-                        pass
+                    try: s.close()
+                    except Exception: pass
+
     return True
 
 def wait_ports_free(ports: Iterable[int], timeout: float = 8.0, poll: float = 0.1, hold: float = 0.3) -> bool:
@@ -61,12 +80,32 @@ def pick_ports(auto_start, auto_end, auto_step,
     assert len({trainer_offset, coach_offset, debug_offset}) == 3
 
     for base in range(auto_start, auto_end, auto_step):
-        block = range(base, base + auto_step)  # 整段保留/探测
+        fd, path = try_lock_port_block(base)
+        if fd is None:
+            continue  # 这段已被别的任务占用（同机互斥）
+
+        block = range(base, base + auto_step)
         if wait_ports_free(block, timeout=timeout, poll=poll, hold=hold):
             server  = base
             trainer = base + trainer_offset
             coach   = base + coach_offset
             debug   = base + debug_offset
-            return base, server, trainer, coach, debug
+            return base, server, trainer, coach, debug, fd, path
+
+        # 端口不空，释放锁继续试下一段
+        try:
+            os.close(fd)
+        except Exception:
+            pass
 
     raise RuntimeError("no free port block found")
+
+def try_lock_port_block(base: int, prefix: str = "robocup2drl") -> Tuple[Optional[int], str]:
+    path = f"/tmp/{prefix}_portblock_{int(base)}.lock"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd, path
+    except BlockingIOError:
+        os.close(fd)
+        return None, path

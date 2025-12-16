@@ -69,6 +69,8 @@ class Robocup2dEnv:
         self.last_obs = None
         self.last_avail_actions = None  # 你后面大概率也会用
         self._closed = False            # close() 里也建议加保护
+        self._port_lock_fd = None
+        self._port_lock_path = None
         self.t0=time.time()
 
         
@@ -274,7 +276,8 @@ class Robocup2dEnv:
         self.log.info(f"[{where}] run_id={self.run_id}")
 
         # 选端口
-        self.base_port, self.server_port, self.trainer_port, self.coach_port, self.debug_port = proc.pick_ports(
+        (self.base_port, self.server_port, self.trainer_port, self.coach_port, self.debug_port,
+        self._port_lock_fd, self._port_lock_path) = proc.pick_ports(
             self.args["auto_port_start"], self.args["auto_port_end"],
             self.args["auto_port_step"], self.args["trainer_port_offset"],
             self.args["coach_port_offset"], self.args["debug_port_offset"],
@@ -315,8 +318,6 @@ class Robocup2dEnv:
             zero_fill=True,
             log=self.log,
         )
-
-
 
     def _start_procs_only(self, where: str = "reset") -> None:
         """
@@ -391,6 +392,23 @@ class Robocup2dEnv:
         self.procs.append(p)
         self.log.info(f"[{where}][coach] pid={p.pid} port={int(self.coach_port)} shm={self.coach_name}")
         time.sleep(0.2)
+
+        # trainer
+        # p, _ = proc.launch_trainer(
+        #     trainer_dir=str(self.args["trainer_dir"]),
+        #     trainer_exe=str(self.args["trainer_exe"]),
+        #     host=str(self.args["host"]),
+        #     trainer_port=int(self.trainer_port),
+        #     team1=self.team1,
+        #     team2=self.team2,
+        #     logs_dir=self.log_dir,
+        #     trainer_shm_name=str(self.trainer_name),
+        #     env=env,
+        #     log_tag=f"{self.run_id}_",
+        # )
+        # self.procs.append(p)
+        # self.log.info(f"[{where}][trainer] pid={p.pid} port={int(self.trainer_port)} shm={self.trainer_name}")
+        # time.sleep(0.2)
 
         self._collect_run_pgids()
 
@@ -852,6 +870,11 @@ class Robocup2dEnv:
             delattr(self, "_obs_keys")
         if hasattr(self, "_act_keys"):
             delattr(self, "_act_keys")
+        if self._port_lock_fd is not None:
+            try: os.close(self._port_lock_fd)
+            except Exception: pass
+            self._port_lock_fd = None
+            self._port_lock_path = None
 
     def _collect_run_pgids(self) -> None:
         def _as_popen(x):
