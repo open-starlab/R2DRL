@@ -2,9 +2,9 @@ env: robocup
 env_args:
   n1: 11
   n2: 11
-  m1: Base
-  m2: Helios
-  episode_limit: 6000
+  team1: Base
+  team2: Helios
+  episode_limit: 150
   seed: 123
 
   host: "localhost"
@@ -21,14 +21,20 @@ env_args:
   debug_port_offset: 8
   trainer_port_offset: 1
   auto_port_start: 6000
-  auto_port_end: 7000
+  auto_port_end: 8000
   auto_port_step: 9
   aggressive_kill: false
   lib_paths:
-    - "/fsws1/h_qin/libs"
-    - "/fsws1/h_qin/hfo/protobuf-3.6.1/install/lib"
-    - "/home/h_qin/local/lib"
-    - "/home/h_qin/.local/lib"
+    - /home/h_qin/local/lib
+    - /fsws1/h_qin/robocup/robocup/lib
+    - /fsws1/h_qin/robocup/robocup/librcsc/rcsc/.libs
+    - /fsws1/h_qin/libs
+    - /fsws1/h_qin/hfo/protobuf-3.6.1/install/lib
+    - /home/h_qin/.local/lib
+
+
 
   goal_x: 52.5
   goal_y: 7.01
+  HALF_LENGTH: 52.5
+  HALF_WIDTH: 34.0

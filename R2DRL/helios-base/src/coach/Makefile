@@ -196,7 +196,7 @@ CPPFLAGS =  -I/usr/include -I/home/h_qin/local/include
 CXX = g++ -std=c++17
 CXXCPP = g++ -std=c++17 -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -g -O2
+CXXFLAGS = -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
@@ -212,7 +212,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LDFLAGS =  -L/usr/lib/x86_64-linux-gnu -L/home/h_qin/local/lib
+LDFLAGS = -fsanitize=address,undefined -L/usr/lib/x86_64-linux-gnu -L/home/h_qin/local/lib
 LIBOBJS = 
 LIBRCSC_LIBDIR = /home/h_qin/local/lib
 LIBS = -lrcsc -lz -lm -lboost_system 

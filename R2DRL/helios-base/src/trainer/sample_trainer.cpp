@@ -115,9 +115,10 @@ SampleTrainer::initImpl( CmdLineParser & cmd_parser )
 
     return true;
 }
-
 bool SampleTrainer::init_shm_()
 {
+    // 名字从 Python 传进来：在 Python 里设置环境变量
+    // os.environ["RCSC_TRAINER_SHM"] = shm_name
     const char* name = std::getenv(SHM_ENV_NAME);
     if (!name || !*name) {
         std::cerr << "[trainer] RCSC_TRAINER_SHM not set." << std::endl;
@@ -125,35 +126,53 @@ bool SampleTrainer::init_shm_()
     }
     shm_name_ = name;
 
-    // 由 Trainer 端创建 4KB 控制面；Python 端随后 attach
-    shm_fd_ = ::shm_open(shm_name_.c_str(), O_CREAT | O_RDWR, 0666);
+    // ✅ 只 attach，不创建、不删除
+    //    Python 负责 shm_open(..., O_CREAT|O_EXCL|O_RDWR) + ftruncate + 初始化
+    shm_fd_ = ::shm_open(shm_name_.c_str(), O_RDWR, 0666);
     if (shm_fd_ < 0) {
-        std::perror("shm_open");
+        std::perror("[trainer] shm_open attach");
         return false;
     }
-    if (::ftruncate(shm_fd_, static_cast<off_t>(TRAINER_SHM_SIZE)) < 0) {
-        std::perror("ftruncate");
-        ::close(shm_fd_); shm_fd_ = -1;
-        return false;
-    }
-    void* p = ::mmap(nullptr, TRAINER_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd_, 0);
+
+    // 不再 ftruncate，避免改坏 Python 那边的大小
+    void* p = ::mmap(nullptr,
+                     TRAINER_SHM_SIZE,          // 要和 Python 约定好相同的大小
+                     PROT_READ | PROT_WRITE,
+                     MAP_SHARED,
+                     shm_fd_,
+                     0);
     if (p == MAP_FAILED) {
-        std::perror("mmap");
-        ::close(shm_fd_); shm_fd_ = -1;
+        std::perror("[trainer] mmap");
+        ::close(shm_fd_);
+        shm_fd_ = -1;
         return false;
     }
 
     shm_      = static_cast<std::uint8_t*>(p);
     shm_size_ = TRAINER_SHM_SIZE;
 
-    // 初始化为 (0,0)，OP=0
-    wr8_(T_FLAG_A, 0);
-    wr8_(T_FLAG_B, 0);
-    wr32_(T_OPCODE, 0);
+    std::cerr << "[trainer] shm attached: " << shm_name_
+              << " size=" << shm_size_ << std::endl;
 
-    std::cerr << "[trainer] shm ready: " << shm_name_ << " size=" << shm_size_ << std::endl;
+        // ===== 在这里加入：把 trainer flags 初始化为 READY(0,1) =====
+    // 只在初始是 (0,0) 的情况下设置，避免覆盖正在运行的握手状态
+    {
+        const std::uint8_t A = rd8_(T_FLAG_A);
+        const std::uint8_t B = rd8_(T_FLAG_B);
+        if (A == 0 && B == 0) {
+            wr8_(T_FLAG_A, 0);
+            wr8_(T_FLAG_B, 1);
+            std::cerr << "[trainer][IPC] init flags -> READY(0,1)\n";
+        } else {
+            std::cerr << "[trainer][IPC] keep existing flags A=" << int(A)
+                      << " B=" << int(B) << "\n";
+        }
+    }
+    // ===========================================================
+    
     return (shm_ready_ = true);
 }
+
 
 void SampleTrainer::close_shm_()
 {
@@ -177,23 +196,28 @@ bool SampleTrainer::try_handle_trainer_ipc_()
 
     const std::uint8_t A = rd8_(T_FLAG_A);
     const std::uint8_t B = rd8_(T_FLAG_B);
+    std::cerr << "[trainer][IPC] check flags: A=" << int(A)
+              << " B=" << int(B) << std::endl;
 
-    // 侦测到请求 (0,1)
-    if (A == 0 && B == 1) {
-        // 标记处理中 -> (1,1)
-        wr8_(T_FLAG_A, 1);
-
-        // 读取 opcode 并执行
+    // ✅ 只在 10 时处理：Python 提交请求
+    if (A == 1 && B == 0) {
         const std::int32_t opcode = rd32_(T_OPCODE);
+        std::cerr << "[trainer][IPC] got request: opcode=" << opcode << std::endl;
+
+        // ✅ ACK：立刻置 B=1，进入 11（C++ 已接单/处理中）
+        wr8_(T_FLAG_B, 1);
+
         exec_opcode_(opcode);
 
-        // 完成后清回 (0,0)
-        wr8_(T_FLAG_A, 0);
-        wr8_(T_FLAG_B, 0);
+        // ✅ 完成：回到 01（ready/done）
+        wr8_(T_FLAG_A, 0);   // 清 A（表示处理结束）
+        // B 保持 1
         return true;
     }
     return false;
 }
+
+
 
 void SampleTrainer::exec_opcode_(std::int32_t opcode)
 {
@@ -207,7 +231,6 @@ void SampleTrainer::exec_opcode_(std::int32_t opcode)
     case 4: // NEW: PlayOn
         doChangeMode( PM_PlayOn );
         break;
-
     case 5: // ⭐ 球 + 所有球员 全场随机站位
     {
         const double half_len = ServerParam::i().pitchHalfLength();
@@ -254,12 +277,74 @@ void SampleTrainer::exec_opcode_(std::int32_t opcode)
 
         break;
     }
-
+    case OP_RESET_FROM_PY:
+        resetFromPython_();
+        break;
     default:
         break;
     }
 }
 
+
+void SampleTrainer::resetFromPython_()
+{
+    if (!shm_ready_ || !shm_) {
+        std::cerr << "[trainer][resetFromPy] shm not ready.\n";
+        return;
+    }
+
+    const std::string & left_name  = world().teamNameLeft();
+    const std::string & right_name = world().teamNameRight();
+    if (left_name.empty() || right_name.empty()) {
+        std::cerr << "[trainer][resetFromPy] team names not ready.\n";
+        return;
+    }
+
+    // 读球
+    const float bx  = rdF_(T_BALL_X);
+    const float by  = rdF_(T_BALL_Y);
+    const float bvx = rdF_(T_BALL_VX);
+    const float bvy = rdF_(T_BALL_VY);
+
+    // recover
+    doRecover();
+
+    // 摆球（含速度）
+    doMoveBall(Vector2D(bx, by), Vector2D(bvx, bvy));
+
+    // 左队
+    for (int i = 0; i < N_LEFT; ++i) {
+        const float px  = rdF_(T_LPX(i));
+        const float py  = rdF_(T_LPY(i));
+        const float dir = rdF_(T_LPD(i));
+        const int unum = i + 1;
+
+        doMovePlayer(left_name, unum,
+                     Vector2D(px, py),
+                     AngleDeg(dir));
+    }
+
+    // 右队
+    for (int i = 0; i < N_RIGHT; ++i) {
+        const float px  = rdF_(T_RPX(i));
+        const float py  = rdF_(T_RPY(i));
+        const float dir = rdF_(T_RPD(i));
+        const int unum = i + 1;
+
+        doMovePlayer(right_name, unum,
+                     Vector2D(px, py),
+                     AngleDeg(dir));
+    }
+
+    // ✅ 切 PlayOn（摆完马上开球）
+    doChangeMode(PM_PlayOn);
+
+    // ✅ 清 opcode，防止重复执行
+    wr32_(T_OPCODE, OP_NOP);
+
+    std::cerr << "[trainer][resetFromPy] done. "
+              << "ball=(" << bx << "," << by << "," << bvx << "," << bvy << ")\n";
+}
 
 
 
@@ -272,6 +357,7 @@ SampleTrainer::actionImpl()
 {
     if (shm_ready_) {
         (void)try_handle_trainer_ipc_();
+        std::cerr << "[trainer] actionImpl: handled trainer IPC.\n" << std::endl;
     }
     if ( world().teamNameLeft().empty() )
     {

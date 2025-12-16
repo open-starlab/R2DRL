@@ -62,28 +62,49 @@
 
 #include <iostream>
 #include <iomanip>
-
+#include <sys/stat.h>   // 
+#include <sys/types.h>  // 
+#include <cstdint>
+#include <cmath>
 using namespace rcsc;
 
 
 struct RealSpeedMaxCmp
-    : public std::binary_function< const PlayerType *,
-                                   const PlayerType *,
-                                   bool > {
+{
+    bool operator()( const PlayerType* lhs,
+                     const PlayerType* rhs ) const
+    {
 
-    result_type operator()( first_argument_type lhs,
-                            second_argument_type rhs ) const
-      {
-          if ( std::fabs( lhs->realSpeedMax() - rhs->realSpeedMax() ) < 0.005 )
-          {
-              return lhs->cyclesToReachMaxSpeed() < rhs->cyclesToReachMaxSpeed();
-          }
+        if (!lhs || !rhs)
+        {
+            return false;
+        }
 
-          return lhs->realSpeedMax() > rhs->realSpeedMax();
-      }
+        double lhs_speed = lhs->realSpeedMax();
+        double rhs_speed = rhs->realSpeedMax();
+        int lhs_cycle = lhs->cyclesToReachMaxSpeed();
+        int rhs_cycle = rhs->cyclesToReachMaxSpeed();
 
+
+        double diff = std::fabs(lhs_speed - rhs_speed);
+
+        if (diff < 0.005)
+        {
+            bool res = lhs_cycle < rhs_cycle;
+            return res;
+        }
+
+        bool res = lhs_speed > rhs_speed;
+
+        return res;
+    }
 };
 
+
+/*-------------------------------------------------------------------*/
+/*!
+
+*/
 /*-------------------------------------------------------------------*/
 /*!
 
@@ -91,53 +112,61 @@ struct RealSpeedMaxCmp
 SampleCoach::SampleCoach()
     : CoachAgent()
 {
-    //
-    // register audio memory & say message parsers
-    //
 
     std::shared_ptr< AudioMemory > audio_memory( new AudioMemory );
 
     M_worldmodel.setAudioMemory( audio_memory );
 
+
     addSayMessageParser( new BallMessageParser( audio_memory ) );
+
     addSayMessageParser( new PassMessageParser( audio_memory ) );
+
     addSayMessageParser( new InterceptMessageParser( audio_memory ) );
+
     addSayMessageParser( new GoalieMessageParser( audio_memory ) );
+
     addSayMessageParser( new GoalieAndPlayerMessageParser( audio_memory ) );
+
     addSayMessageParser( new OffsideLineMessageParser( audio_memory ) );
+
     addSayMessageParser( new DefenseLineMessageParser( audio_memory ) );
+
     addSayMessageParser( new WaitRequestMessageParser( audio_memory ) );
+
     addSayMessageParser( new PassRequestMessageParser( audio_memory ) );
+
     addSayMessageParser( new DribbleMessageParser( audio_memory ) );
+
     addSayMessageParser( new BallGoalieMessageParser( audio_memory ) );
+
     addSayMessageParser( new OnePlayerMessageParser( audio_memory ) );
+
     addSayMessageParser( new TwoPlayerMessageParser( audio_memory ) );
+
     addSayMessageParser( new ThreePlayerMessageParser( audio_memory ) );
+
     addSayMessageParser( new SelfMessageParser( audio_memory ) );
+
     addSayMessageParser( new TeammateMessageParser( audio_memory ) );
+
     addSayMessageParser( new OpponentMessageParser( audio_memory ) );
+
     addSayMessageParser( new BallPlayerMessageParser( audio_memory ) );
+
     addSayMessageParser( new StaminaMessageParser( audio_memory ) );
+
     addSayMessageParser( new RecoveryMessageParser( audio_memory ) );
 
-    // addSayMessageParser( new FreeMessageParser< 9 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 8 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 7 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 6 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 5 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 4 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 3 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 2 >( audio_memory ) );
-    // addSayMessageParser( new FreeMessageParser< 1 >( audio_memory ) );
-
-    //
-    //
-    //
 
     for ( int i = 0; i < 11; ++i )
     {
         M_opponent_player_types[i] = Hetero_Default;
     }
+
+    // 初始化 shm 字段（如果你有这些成员）
+    shm_fd_  = -1;
+    shm_ptr_ = nullptr;
 
 }
 
@@ -148,88 +177,108 @@ SampleCoach::SampleCoach()
 SampleCoach::~SampleCoach()
 {
 
+    // 如果你想在这里解除映射和关闭 shm
+    if ( shm_ptr_ )
+    {
+        munmap(shm_ptr_, SHM_SIZE);
+        shm_ptr_ = nullptr;
+    }
+    else
+    {
+    }
+
+    if ( shm_fd_ != -1 )
+    {
+        close(shm_fd_);
+        shm_fd_ = -1;
+    }
+    else
+    {
+    }
+
 }
+
 
 /*-------------------------------------------------------------------*/
 /*!
 
  */
-// bool
-// SampleCoach::initImpl( CmdLineParser & cmd_parser )
-// {
-//     bool result =CoachAgent::initImpl( cmd_parser );
-
-// #if 0
-//     ParamMap my_params;
-//     if ( cmd_parser.count( "help" ) )
-//     {
-//        my_params.printHelp( std::cout );
-//        return false;
-//     }
-//     cmd_parser.parse( my_params );
-// #endif
-
-//     if ( cmd_parser.failed() )
-//     {
-//         std::cerr << "coach: ***WARNING*** detected unsupported options: ";
-//         cmd_parser.print( std::cerr );
-//         std::cerr << std::endl;
-//     }
-
-//     if ( ! result )
-//     {
-//         return false;
-//     }
-
-//     //////////////////////////////////////////////////////////////////
-//     // Add your code here.
-//     //////////////////////////////////////////////////////////////////
-
-//     if ( config().useTeamGraphic() )
-//     {
-//         if ( config().teamGraphicFile().empty() )
-//         {
-//             // M_team_graphic.readXpmFile( team_logo_xpm );
-//         }
-//         else
-//         {
-//             M_team_graphic.readXpmFile( config().teamGraphicFile().c_str() );
-//         }
-//     }
-
-//     return true;
-// }bool
-
 
 bool SampleCoach::initSharedMemory()
 {
-    shm_fd_ = shm_open(shm_name_.c_str(), O_CREAT | O_RDWR, 0666);
-    if (shm_fd_ == -1) {
-        perror("shm_open");
+
+    // attach-only: Python side must create + ftruncate + zero_fill
+    // coach side must NOT O_CREAT, must NOT ftruncate, must NOT memset
+    shm_fd_ = -1;
+    shm_ptr_ = nullptr;
+
+    if (shm_name_.empty())
+    {
+    }
+
+    // wait for shm to appear (coach may start before python creates it)
+    constexpr int kRetry = 400;        // 400 * 10ms = 4s
+    constexpr int kSleepUs = 10 * 1000;
+
+
+    for (int i = 0; i < kRetry; ++i)
+    {
+        if (!shm_name_.empty() && shm_name_[0] != '/') {
+            shm_name_ = "/" + shm_name_;
+        }
+        shm_fd_ = shm_open(shm_name_.c_str(), O_RDWR, 0666);
+
+        if (shm_fd_ != -1)
+        {
+            break;
+        }
+
+        usleep(kSleepUs);
+    }
+
+    if (shm_fd_ == -1)
+    {
+        perror("shm_open(attach-only)");
         return false;
     }
 
-    if (ftruncate(shm_fd_, SHM_SIZE) == -1) {
-        perror("ftruncate");
+    // (optional but recommended) verify size matches SHM_SIZE
+    struct stat st;
+    if (fstat(shm_fd_, &st) == -1)
+    {
+        perror("fstat(shm_fd)");
+        close(shm_fd_);
+        shm_fd_ = -1;
+        return false;
+    }
+
+
+    if (static_cast<size_t>(st.st_size) != static_cast<size_t>(SHM_SIZE))
+    {
+        close(shm_fd_);
+        shm_fd_ = -1;
         return false;
     }
 
     shm_ptr_ = mmap(nullptr, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd_, 0);
-    if (shm_ptr_ == MAP_FAILED) {
+    if (shm_ptr_ == MAP_FAILED)
+    {
         perror("mmap");
+        shm_ptr_ = nullptr;
+        close(shm_fd_);
+        shm_fd_ = -1;
         return false;
     }
 
-    std::memset(shm_ptr_, 0, SHM_SIZE);  // 初始化为全 0
-    // std::cerr << "[Coach] Shared memory initialized at: " << shm_name_ << std::endl;
     return true;
 }
 
 bool SampleCoach::initImpl( rcsc::CmdLineParser & cmd_parser )
 {
+
     bool result = CoachAgent::initImpl( cmd_parser );
 
-    // ✅ 添加共享内存选项解析
+    // 共享内存选项解析
     rcsc::ParamMap my_params( "SampleCoach Options" );
     my_params.add()
         ( "shm-name", "", &shm_name_, "shared memory name (default: /coach_global_state)" );
@@ -244,9 +293,10 @@ bool SampleCoach::initImpl( rcsc::CmdLineParser & cmd_parser )
 
     if ( cmd_parser.failed() )
     {
-        // std::cerr << "coach: ***WARNING*** detected unsupported options: ";
-        // cmd_parser.print( std::cerr );
-        // std::cerr << std::endl;
+        // 原注释保留
+    }
+    else
+    {
     }
 
     if ( ! result )
@@ -257,22 +307,18 @@ bool SampleCoach::initImpl( rcsc::CmdLineParser & cmd_parser )
     //////////////////////////////////////////////////////////////////
     // 共享内存初始化
     //////////////////////////////////////////////////////////////////
-    std::cerr << "[SampleCoach] Using shared memory: " << shm_name_ << std::endl;
+
     if (!initSharedMemory())
     {
-        std::cerr << "***ERROR*** Cannot init shared memory." << std::endl;
         return false;
     }
 
-    std::cerr << "[Coach] initImpl() begin" << std::endl;
-    std::cerr << "[Coach] Using shared memory: " << shm_name_ << std::endl;
-    std::cerr << "[Coach] Server host/port (from config): "
-            << config().host().c_str() << ":" << config().port() << std::endl;
 
 
     //////////////////////////////////////////////////////////////////
     // 其他初始化
     //////////////////////////////////////////////////////////////////
+
     if ( config().useTeamGraphic() )
     {
         if ( config().teamGraphicFile().empty() )
@@ -285,149 +331,151 @@ bool SampleCoach::initImpl( rcsc::CmdLineParser & cmd_parser )
         }
     }
 
-    // 让 C++ iostream 更快且不缓冲（配合 Python 重定向，日志实时落盘）
+    // 让 C++ iostream 更快且不缓冲
     std::ios::sync_with_stdio(false);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    std::cerr << "[Coach] Team name (from config): "
-          << config().teamName().c_str() << std::endl;
 
     return true;
 }
 
-// void SampleCoach::writeSharedMemory()
-// {
-//     if (!shm_ptr_) return;
 
-//     auto *flag   = static_cast<uint8_t*>(shm_ptr_);
-//     auto *cyclep = reinterpret_cast<int32_t*>(flag + 1);
-//     auto *fp     = reinterpret_cast<float*>(flag + 5);
-
-//     /*—— 等 Python 读完才写下一帧 ——*/
-//     // if (*flag != 0) return;          // Python 还没清零，跳过本帧
-
-//     /*--- 写入 ---*/
-//     *cyclep = world().time().cycle();
-//     *fp++ = world().ball().pos().x;
-//     *fp++ = world().ball().pos().y;
-//     *fp++ = world().ball().vel().x;
-//     *fp++ = world().ball().vel().y;
-
-//     auto dump_player = [&](const rcsc::CoachPlayerObject* p, int team){
-//         *fp++ = p ? p->pos().x  : 0.f;
-//         *fp++ = p ? p->pos().y  : 0.f;
-//         *fp++ = p ? p->vel().x  : 0.f;
-//         *fp++ = p ? p->vel().y  : 0.f;
-//         *fp++ = p ? static_cast<float>(p->body().degree()) : 0.f;
-//         *fp++ = static_cast<float>(team);
-//     };
-//     for (const auto &t : world().teammates()) dump_player(t,0);
-//     for (int i=world().teammates().size(); i<11; ++i) dump_player(nullptr,0);
-//     for (const auto &o : world().opponents()) dump_player(o,1);
-//     for (int i=world().opponents().size(); i<11; ++i) dump_player(nullptr,1);
-
-//     *flag = 1;                       // ✅ 通知 Python
-// }
 #include <iomanip>  // 👈 加上这一行
+#include <iomanip>  // 确保有这一行
 
 void SampleCoach::writeSharedMemory()
 {
-    if (!shm_ptr_) return;
+    if (!shm_ptr_) {
+        return;
+    }
 
-    auto *flag   = static_cast<uint8_t*>(shm_ptr_);
-    auto *cyclep = reinterpret_cast<int32_t*>(flag + 1);
-    auto *fp     = reinterpret_cast<float*>(flag + 5);
+    auto* base = static_cast<std::uint8_t*>(shm_ptr_);
 
-    /* 不再等待 Python，直接覆盖写 */
-    *cyclep = world().time().cycle();
+    // 布局保持不变：
+    // flag   : +0 (uint8)
+    // cycle  : +1 (int32)   -> 注意这里是“非对齐地址”，必须 memcpy
+    // floats : +5 (136 * float)
+    // mode   : + (1 + 4 + 136*4) = +549 (int32) -> 同样可能非对齐，必须 memcpy
 
-    /*========== 打印并写入球 =========*/
-    const float ball_x  = world().ball().pos().x;
-    const float ball_y  = world().ball().pos().y;
-    const float ball_vx = world().ball().vel().x;
-    const float ball_vy = world().ball().vel().y;
+    constexpr std::size_t OFF_FLAG  = 0;
+    constexpr std::size_t OFF_CYCLE = 1;
+    constexpr std::size_t OFF_FLOAT = 5;
+    constexpr std::size_t NFLOATS   = 136;
+    constexpr std::size_t OFF_MODE  = 1 + 4 + NFLOATS * 4;
 
-    *fp++ = ball_x;  *fp++ = ball_y;
-    *fp++ = ball_vx; *fp++ = ball_vy;
-
-    // std::cout << "[Cycle " << *cyclep << "]  "
-    //         << "BALL pos=(" << ball_x << ',' << ball_y
-    //         << ") vel=(" << ball_vx << ',' << ball_vy << ")\n";
-
-    /*========== 打印并写入球员 =========*/
-    int idx = 0;           // 0-10: 我方, 11-21: 对方
-    auto dump_player = [&](const rcsc::CoachPlayerObject* p, int team){
-        const float x   = p ? p->pos().x         : 0.f;
-        const float y   = p ? p->pos().y         : 0.f;
-        const float vx  = p ? p->vel().x         : 0.f;
-        const float vy  = p ? p->vel().y         : 0.f;
-        const float dir = p ? p->body().degree() : 0.f;
-
-        *fp++ = x;  *fp++ = y;
-        *fp++ = vx; *fp++ = vy;
-        *fp++ = dir;
-        *fp++ = static_cast<float>(team);
-
-        // std::cout << "  " << (team==0 ? "OUR " : "OPP ")
-        //         << std::setw(2) << idx%11   << "  "
-        //         << "pos=(" << x << ',' << y << ")  "
-        //         << "vel=(" << vx << ',' << vy << ")  "
-        //         << "dir="  << dir << '\n';
-        ++idx;
+    auto wr_u8 = [&](std::size_t off, std::uint8_t v) {
+        std::memcpy(base + off, &v, sizeof(v));
+    };
+    auto wr_i32 = [&](std::size_t off, std::int32_t v) {
+        std::memcpy(base + off, &v, sizeof(v));
+    };
+    auto wr_f32 = [&](std::size_t off, float v) {
+        std::memcpy(base + off, &v, sizeof(v));
     };
 
-    for (const auto &t : world().teammates()) dump_player(t, 0);
-    for (int i = world().teammates().size(); i < 11; ++i) dump_player(nullptr, 0);
+    // 1) cycle
+    const std::int32_t cur_cycle = static_cast<std::int32_t>(world().time().cycle());
+    wr_i32(OFF_CYCLE, cur_cycle);
 
-    for (const auto &o : world().opponents()) dump_player(o, 1);
-    for (int i = world().opponents().size(); i < 11; ++i) dump_player(nullptr, 1);
+    // 2) 写 float 区：从 +5 开始，顺序保持和你原来完全一致
+    std::size_t k = 0; // float index [0, NFLOATS)
 
-    auto *modep = reinterpret_cast<int32_t*>(
-                      reinterpret_cast<char*>(shm_ptr_) + (1 + 4 + 136 * 4) );
-    *modep = static_cast<int32_t>(world().gameMode().type());
+    auto push_f = [&](float v) {
+        if (k < NFLOATS) {
+            wr_f32(OFF_FLOAT + k * sizeof(float), v);
+            ++k;
+        }
+        // 若 k 超了，说明 NFLOATS/布局定义不匹配；这里选择静默忽略，避免越界写
+    };
 
-    *flag = 1;   // 通知 Python
+    // ===== 球 =====
+    push_f(static_cast<float>(world().ball().pos().x));
+    push_f(static_cast<float>(world().ball().pos().y));
+    push_f(static_cast<float>(world().ball().vel().x));
+    push_f(static_cast<float>(world().ball().vel().y));
+
+    // ===== 球员 =====
+    int n_team = static_cast<int>(world().teammates().size());
+    int n_opp  = static_cast<int>(world().opponents().size());
+
+    auto dump_player = [&](const rcsc::CoachPlayerObject* p, int team) {
+        const float x   = p ? static_cast<float>(p->pos().x)         : 0.f;
+        const float y   = p ? static_cast<float>(p->pos().y)         : 0.f;
+        const float vx  = p ? static_cast<float>(p->vel().x)         : 0.f;
+        const float vy  = p ? static_cast<float>(p->vel().y)         : 0.f;
+        const float dir = p ? static_cast<float>(p->body().degree()) : 0.f;
+
+        push_f(x);
+        push_f(y);
+        push_f(vx);
+        push_f(vy);
+        push_f(dir);
+        push_f(static_cast<float>(team));
+    };
+
+    // 我方：最多 11
+    for (const auto& t : world().teammates()) {
+        dump_player(t, 0);
+        if (--n_team <= 0) break;
+    }
+    // 不足补 0 到 11 人
+    for (int i = static_cast<int>(world().teammates().size()); i < 11; ++i) {
+        dump_player(nullptr, 0);
+    }
+
+    // 对方：最多 11
+    for (const auto& o : world().opponents()) {
+        dump_player(o, 1);
+        if (--n_opp <= 0) break;
+    }
+    // 不足补 0 到 11 人
+    for (int i = static_cast<int>(world().opponents().size()); i < 11; ++i) {
+        dump_player(nullptr, 1);
+    }
+
+    // 如果还没写满 136 floats（例如未来字段调整），剩余填 0，避免 Python 读到旧数据
+    while (k < NFLOATS) {
+        push_f(0.f);
+    }
+
+    // 3) mode (GameMode type) @ +549
+    const std::int32_t gm_type = static_cast<std::int32_t>(world().gameMode().type());
+    wr_i32(OFF_MODE, gm_type);
+
+    // 4) flag = 1 通知 Python
+    wr_u8(OFF_FLAG, static_cast<std::uint8_t>(1));
 }
-
 
 /*-------------------------------------------------------------------*/
 /*!
 
 */
-// void
-// SampleCoach::actionImpl()
-// {
-//     std::cout << "[Coach] Cycle " << world().time().cycle() << " running." << std::endl;
-//     debugClient().addMessage( "Cycle=%ld", world().time().cycle() );
 
-//     if ( world().time().cycle() == 0
-//          && config().useTeamGraphic()
-//          && M_team_graphic.tiles().size() != teamGraphicOKSet().size() )
-//     {
-//         sendTeamGraphic();
-//     }
-
-//     doSubstitute();
-//     sayPlayerTypes();
-// }
 void
 SampleCoach::actionImpl()
 {
+
+    long cyc_from_world = world().time().cycle();
+
     debugClient().addMessage( "Cycle=%ld", world().time().cycle() );
+
     const long cyc = world().time().cycle();
-    if (cyc % 50 == 0) {  // 避免刷屏
-        std::cerr << "[Coach] actionImpl cycle=" << cyc << std::endl;
-    }
+
+    // 原来的 teamGraphic/substitute/sayPlayerTypes 都先关掉了
+    // 如果之后要开，也可以继续在里面打 log
     // if ( world().time().cycle() == 0
     //      && config().useTeamGraphic()
     //      && M_team_graphic.tiles().size() != teamGraphicOKSet().size() )
     // {
     //     sendTeamGraphic();
     // }
+
     // doSubstitute();
     // sayPlayerTypes();
+
     writeSharedMemory();
+
 }
 
 /*-------------------------------------------------------------------*/
@@ -437,7 +485,7 @@ SampleCoach::actionImpl()
 void
 SampleCoach::handleInitMessage()
 {
-
+    // nothing yet
 }
 
 /*-------------------------------------------------------------------*/
@@ -447,7 +495,7 @@ SampleCoach::handleInitMessage()
 void
 SampleCoach::handleServerParam()
 {
-
+    // nothing yet
 }
 
 /*-------------------------------------------------------------------*/
@@ -457,7 +505,7 @@ SampleCoach::handleServerParam()
 void
 SampleCoach::handlePlayerParam()
 {
-
+    // nothing yet
 }
 
 /*-------------------------------------------------------------------*/
@@ -467,7 +515,7 @@ SampleCoach::handlePlayerParam()
 void
 SampleCoach::handlePlayerType()
 {
-
+    // nothing yet
 }
 
 /*-------------------------------------------------------------------*/
@@ -477,26 +525,38 @@ SampleCoach::handlePlayerType()
 void
 SampleCoach::doSubstitute()
 {
+
     static bool S_first_substituted = false;
 
+    int cyc = world().time().cycle();
+    double stopped = world().time().stopped();
+
     if ( ! S_first_substituted
-         && world().time().cycle() == 0
-         && world().time().stopped() > 10 )
+         && cyc == 0
+         && stopped > 10 )
     {
+
         doFirstSubstitute();
+
         S_first_substituted = true;
 
         return;
     }
 
-    if ( world().time().cycle() > 0
-         && world().gameMode().type() != GameMode::PlayOn
-         && ! world().gameMode().isPenaltyKickMode() )
+    GameMode::Type gm_type = world().gameMode().type();
+    bool is_penalty = world().gameMode().isPenaltyKickMode();
+
+
+    if ( cyc > 0
+         && gm_type != GameMode::PlayOn
+         && ! is_penalty )
     {
+
         doSubstituteTiredPlayers();
 
         return;
     }
+
 }
 
 /*-------------------------------------------------------------------*/
@@ -506,83 +566,65 @@ SampleCoach::doSubstitute()
 void
 SampleCoach::doFirstSubstitute()
 {
+
     PlayerTypePtrCont candidates;
 
     std::fprintf( stderr,
-                  "id speed step inc  power  stam"
-                  //" decay"
-                  //" moment"
-                  //" dprate"
-                  "  karea"
-                  //"  krand"
-                  //" effmax effmin"
-                  "\n" );
+                  "[COACH][doFirstSubstitute] id speed step inc  power  stam  karea\n" );
 
-    for ( int id = 0; id < PlayerParam::i().playerTypes(); ++id )
+    int total_ptypes = PlayerParam::i().playerTypes();
+
+    for ( int id = 0; id < total_ptypes; ++id )
     {
+
         const PlayerType * param = PlayerTypeSet::i().get( id );
 
         if ( ! param )
         {
-            std::cerr << config().teamName() << " coach: "
-                      << " could not get the player type " << id << std::endl;
             continue;
         }
 
-        if ( id == Hetero_Default
-             && PlayerParam::i().allowMultDefaultType() )
+        bool is_default = ( id == Hetero_Default );
+        bool allow_multi_default = PlayerParam::i().allowMultDefaultType();
+
+
+        if ( is_default
+             && allow_multi_default )
         {
+            int pt_num = MAX_PLAYER + 1;
+
             for ( int i = 0; i <= MAX_PLAYER; ++i )
             {
                 candidates.push_back( param );
             }
+
         }
 
-        for ( int i = 0; i < PlayerParam::i().ptMax(); ++i )
+        int pt_max = PlayerParam::i().ptMax();
+
+        for ( int i = 0; i < pt_max; ++i )
         {
             candidates.push_back( param );
         }
 
+
         std::fprintf( stderr,
-                      " %d %.3f  %2d  %.1f %5.1f %5.1f"
-                      //" %.3f"
-                      //"  %4.1f"
-                      //"  %.5f"
-                      "  %.3f"
-                      //"  %.2f"
-                      //"  %.3f  %.3f"
-                      "\n",
+                      "[COACH][doFirstSubstitute] %d %.3f  %2d  %.1f %5.1f %5.1f  %.3f\n",
                       id,
                       param->realSpeedMax(),
                       param->cyclesToReachMaxSpeed(),
                       param->staminaIncMax(),
                       param->getDashPowerToKeepMaxSpeed(),
                       param->getOneStepStaminaComsumption(),
-                      //param->playerDecay(),
-                      //param->inertiaMoment(),
-                      //param->dashPowerRate(),
                       param->kickableArea()
-                      //param->kickRand(),
-                      //param->effortMax(), param->effortMin()
                       );
+
     }
+
 
     std::vector< int > ordered_unum;
     ordered_unum.reserve( 11 );
 
-#if 0
-    // side back has priority
-    ordered_unum.push_back( 11 ); // center forward
-    ordered_unum.push_back( 2 );  // center back
-    ordered_unum.push_back( 3 );  // center back
-    ordered_unum.push_back( 4 );  // side back
-    ordered_unum.push_back( 5 );  // side back
-    ordered_unum.push_back( 10 ); // side half
-    ordered_unum.push_back( 9 );  // side half
-    ordered_unum.push_back( 6 );  // center half
-    ordered_unum.push_back( 7 );  // defensive half
-    ordered_unum.push_back( 8 );  // defensive half
-#else
     // wing player has priority
     ordered_unum.push_back( 11 ); // center forward
     ordered_unum.push_back( 2 );  // center back
@@ -594,23 +636,29 @@ SampleCoach::doFirstSubstitute()
     ordered_unum.push_back( 5 );  // side back
     ordered_unum.push_back( 7 );  // defensive half
     ordered_unum.push_back( 8 );  // defensive half
-#endif
 
+    for ( size_t i = 0; i < ordered_unum.size(); ++i )
+    {
+    }
 
     //
     // goalie:
-    // goalie is always assigned to the default type so far.
     //
+    double ver = config().version();
 
-    if ( config().version() >= 14.0 )
+    if ( ver >= 14.0 )
     {
         substituteTo( 1, Hetero_Default ); // goalie
     }
+    else
+    {
+    }
+
     {
         PlayerTypePtrCont::iterator it = candidates.begin();
         for ( ; it != candidates.end(); ++it )
         {
-            if ( (*it)->id() == Hetero_Default )
+            if ( (*it) && (*it)->id() == Hetero_Default )
             {
                 break;
             }
@@ -619,6 +667,9 @@ SampleCoach::doFirstSubstitute()
         if ( it != candidates.end() )
         {
             candidates.erase( it );
+        }
+        else
+        {
         }
     }
 
@@ -630,12 +681,11 @@ SampleCoach::doFirstSubstitute()
           unum != ordered_unum.end();
           ++unum )
     {
+
         const CoachPlayerObject * p = world().teammate( *unum );
         if ( ! p )
         {
-            // std::cerr << config().teamName() << " coach: "
-            //           << " teammate " << *unum << " does not exist."
-            //           << " skip first substitution." << std::endl;
+
             dlog.addText( Logger::TEAM,
                           __FILE__": teammate %d does not exist. skip first substitution.",
                           *unum );
@@ -643,12 +693,19 @@ SampleCoach::doFirstSubstitute()
         }
 
         int type = getFastestType( candidates );
+
         if ( type != Hetero_Unknown )
         {
             substituteTo( *unum, type );
         }
+        else
+        {
+        }
+
     }
+
 }
+
 
 /*-------------------------------------------------------------------*/
 /*!
@@ -657,11 +714,13 @@ SampleCoach::doFirstSubstitute()
 void
 SampleCoach::doSubstituteTiredPlayers()
 {
+
     int substitute_count = world().ourSubstituteCount();
 
-    if ( substitute_count >= PlayerParam::i().subsMax() )
+    int subs_max = PlayerParam::i().subsMax();
+
+    if ( substitute_count >= subs_max )
     {
-        // over the maximum substitution
         return;
     }
 
@@ -671,9 +730,12 @@ SampleCoach::doSubstituteTiredPlayers()
     // check game time
     //
     const int half_time = SP.actualHalfTime();
+
     const int normal_time = half_time * SP.nrNormalHalfs();
 
-    if ( world().time().cycle() < normal_time - 500
+    const int cur_cycle = world().time().cycle();
+
+    if ( cur_cycle < normal_time - 500
          //|| world().time().cycle() <= half_time + 1
          //|| world().gameMode().type() == GameMode::KickOff_
          )
@@ -681,11 +743,9 @@ SampleCoach::doSubstituteTiredPlayers()
         return;
     }
 
-    dlog.addText( Logger::TEAM,
-                  __FILE__": consider to substitute tired teammates." );
 
     //
-    // create candidate teamamte
+    // create candidate teammate
     //
     std::vector< int > tired_teammate_unum;
 
@@ -694,16 +754,36 @@ SampleCoach::doSubstituteTiredPlayers()
           t != end;
           ++t )
     {
-        if ( (*t)->recovery() < ServerParam::i().recoverInit() - 0.002 )
+
+        if ( ! (*t) )
         {
-            tired_teammate_unum.push_back( (*t)->unum() );
+            continue;
+        }
+
+        int unum = (*t)->unum();
+        double rec = (*t)->recovery();
+        double threshold = ServerParam::i().recoverInit() - 0.002;
+
+
+        if ( rec < threshold )
+        {
+            tired_teammate_unum.push_back( unum );
+        }
+        else
+        {
+        }
+
+    }
+
+    if ( ! tired_teammate_unum.empty() )
+    {
+        for ( size_t i = 0; i < tired_teammate_unum.size(); ++i )
+        {
         }
     }
 
     if ( tired_teammate_unum.empty() )
     {
-        dlog.addText( Logger::TEAM,
-                      __FILE__": no tired teammates." );
         return;
     }
 
@@ -718,38 +798,46 @@ SampleCoach::doSubstituteTiredPlayers()
           id != end;
           ++id )
     {
+
         const PlayerType * param = PlayerTypeSet::i().get( *id );
         if ( ! param )
         {
-            // std::cerr << config().teamName() << " coach: "
-            //           << world().time()
-            //           << " : Could not get player type. id=" << *id << std::endl;
             continue;
         }
 
         candidates.push_back( param );
+
     }
+
 
     //
     // try substitution
     //
 
-
     for ( std::vector< int >::iterator unum = tired_teammate_unum.begin();
           unum != tired_teammate_unum.end();
           ++unum )
     {
+
         int type = getFastestType( candidates );
+
         if ( type != Hetero_Unknown )
         {
             substituteTo( *unum, type );
-            if ( ++substitute_count >= PlayerParam::i().subsMax() )
+
+            substitute_count++;
+
+            if ( substitute_count >= subs_max )
             {
-                // over the maximum substitution
                 break;
             }
         }
+        else
+        {
+        }
+
     }
+
 }
 
 /*-------------------------------------------------------------------*/
@@ -760,14 +848,15 @@ void
 SampleCoach::substituteTo( const int unum,
                            const int type )
 {
-    if ( world().time().cycle() > 0
-         && world().ourSubstituteCount() >= PlayerParam::i().subsMax() )
+
+    int cur_cycle = world().time().cycle();
+    int subs_max = PlayerParam::i().subsMax();
+    int cur_sub_count = world().ourSubstituteCount();
+
+
+    if ( cur_cycle > 0
+         && cur_sub_count >= subs_max )
     {
-        // std::cerr << "***Warning*** "
-        //           << config().teamName() << " coach: over the substitution max."
-        //           << " cannot change the player " << unum
-        //           << " to type " << type
-        //           << std::endl;
         return;
     }
 
@@ -775,22 +864,15 @@ SampleCoach::substituteTo( const int unum,
         it = std::find( world().availablePlayerTypeId().begin(),
                         world().availablePlayerTypeId().end(),
                         type );
-    if ( it == world().availablePlayerTypeId().end() )
+    bool found = ( it != world().availablePlayerTypeId().end() );
+
+    if ( ! found )
     {
-        // std::cerr << "***ERROR*** "
-        //           << config().teamName() << " coach: "
-        //           << " cannot change the player " << unum
-        //           << " to type " << type
-        //           << std::endl;
         return;
     }
 
     doChangePlayerType( unum, type );
 
-    // std::cout << config().teamName() << " coach: "
-    //           << "change player " << unum
-    //           << " to type " << type
-    //           << std::endl;
 }
 
 /*-------------------------------------------------------------------*/
@@ -800,60 +882,85 @@ SampleCoach::substituteTo( const int unum,
 int
 SampleCoach::getFastestType( PlayerTypePtrCont & candidates )
 {
+
     if ( candidates.empty() )
     {
         return Hetero_Unknown;
     }
 
-    // sort by max speed
     std::sort( candidates.begin(),
                candidates.end(),
                RealSpeedMaxCmp() );
 
-//     std::cerr << "getFastestType candidate = ";
-//     for ( PlayerTypePtrCont::iterator it = candidates.begin();
-//           it != candidates.end();
-//           ++it )
-//     {
-//         std::cerr << (*it)->id() << ' ';
-//     }
-//     std::cerr << std::endl;
-
     PlayerTypePtrCont::iterator best_type = candidates.end();
     double max_speed = 0.0;
     int min_cycle = 100;
+
+
     for ( PlayerTypePtrCont::iterator it = candidates.begin();
           it != candidates.end();
           ++it )
     {
-        if ( (*it)->realSpeedMax() < max_speed - 0.01 )
+        if ( ! (*it) )
+        {
+            continue;
+        }
+
+        double speed = (*it)->realSpeedMax();
+        int cycle_to_max = (*it)->cyclesToReachMaxSpeed();
+        double stamina_one_step = (*it)->getOneStepStaminaComsumption();
+        int id = (*it)->id();
+
+
+        if ( speed < max_speed - 0.01 )
         {
             break;
         }
 
-        if ( (*it)->cyclesToReachMaxSpeed() < min_cycle )
+        if ( cycle_to_max < min_cycle )
         {
+
             best_type = it;
-            max_speed = (*best_type)->realSpeedMax();
-            min_cycle = (*best_type)->cyclesToReachMaxSpeed();
+            max_speed = speed;
+            min_cycle = cycle_to_max;
+
+
             continue;
         }
 
-        if ( (*it)->cyclesToReachMaxSpeed() == min_cycle )
+        if ( cycle_to_max == min_cycle )
         {
-            if ( (*it)->getOneStepStaminaComsumption()
-                 < (*best_type)->getOneStepStaminaComsumption() )
+
+            if ( best_type == candidates.end() )
             {
                 best_type = it;
-                max_speed = (*best_type)->realSpeedMax();
+                max_speed = speed;
+                continue;
+            }
+
+            double best_stamina_one_step = (*best_type)->getOneStepStaminaComsumption();
+            int best_id = (*best_type)->id();
+
+
+            if ( stamina_one_step < best_stamina_one_step )
+            {
+                best_type = it;
+                max_speed = speed;
+
+            }
+            else
+            {
             }
         }
     }
 
-    if ( best_type != candidates.end() )
+
+    if ( best_type != candidates.end() && (*best_type) )
     {
         int id = (*best_type)->id();
+
         candidates.erase( best_type );
+
         return id;
     }
 
@@ -867,12 +974,6 @@ SampleCoach::getFastestType( PlayerTypePtrCont & candidates )
 void
 SampleCoach::sayPlayerTypes()
 {
-    /*
-      format:
-      "(player_types (1 0) (2 1) (3 2) (4 3) (5 4) (6 5) (7 6) (8 -1) (9 0) (10 1) (11 2))"
-      ->
-      (say (freeform "(player_type ...)"))
-    */
 
     static GameTime s_last_send_time( 0, 0 );
 
@@ -890,23 +991,35 @@ SampleCoach::sayPlayerTypes()
 
     for ( int unum = 1; unum <= 11; ++unum )
     {
+
         const int id = world().theirPlayerTypeId( unum );
+
 
         if ( id != M_opponent_player_types[unum - 1] )
         {
+
             M_opponent_player_types[unum - 1] = id;
+
 
             if ( id != Hetero_Unknown )
             {
                 ++analyzed_count;
             }
+            else
+            {
+            }
         }
+        else
+        {
+        }
+
     }
 
     if ( analyzed_count == 0 )
     {
         return;
     }
+
 
     std::shared_ptr< FreeformMessage > ptr( new OpponentPlayerTypeMessage( M_opponent_player_types[0],
                                                                            M_opponent_player_types[1],
@@ -924,25 +1037,26 @@ SampleCoach::sayPlayerTypes()
 
     s_last_send_time = world().time();
 
-
     std::string msg;
     msg.reserve( 128 );
 
     msg = "(player_types ";
+
     for ( int unum = 1; unum <= 11; ++unum )
     {
         char buf[8];
+
         snprintf( buf, 8, "(%d %d)",
                   unum, M_opponent_player_types[unum - 1] );
+
         msg += buf;
+
     }
+
     msg += ')';
 
-    // std::cout << config().teamName()
-    //           << " coach: "
-    //           << world().time()
-    //           << " sent freeform " << msg
-    //           << std::endl;
+    // 原来这里是 cout 的注释，改成 cerr 输出
+
 }
 
 /*-------------------------------------------------------------------*/
@@ -952,20 +1066,35 @@ SampleCoach::sayPlayerTypes()
 void
 SampleCoach::sendTeamGraphic()
 {
+
     int count = 0;
+
+
     for ( TeamGraphic::Map::const_reverse_iterator tile = M_team_graphic.tiles().rbegin();
           tile != M_team_graphic.tiles().rend();
           ++tile )
     {
+
+        bool already_ok = ( teamGraphicOKSet().find( tile->first ) != teamGraphicOKSet().end() );
+
         if ( teamGraphicOKSet().find( tile->first ) == teamGraphicOKSet().end() )
         {
-            if ( ! doTeamGraphic( tile->first.first,
-                                  tile->first.second,
-                                  M_team_graphic ) )
+
+            bool ok = doTeamGraphic( tile->first.first,
+                                     tile->first.second,
+                                     M_team_graphic );
+
+            if ( ! ok )
             {
                 break;
             }
+
             ++count;
         }
+        else
+        {
+        }
+
     }
+
 }

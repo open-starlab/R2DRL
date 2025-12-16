@@ -41,7 +41,6 @@
 #include <cstdint>  // uint8_t
 #include <string>
 #include <atomic>
-#pragma once
 
 enum ActionType {
     ACTION_TACKLE = 0,        // 铲球
@@ -149,7 +148,7 @@ protected:
 
 private:
     void* shm_ptr = nullptr;  // 共享内存映射地址
-    std::string SHM_NAME = "/my_shared_memory";  // 支持命令行传入
+    std::string SHM_NAME = "";  // 支持命令行传入
 
     bool doPreprocess();
     bool doShoot();

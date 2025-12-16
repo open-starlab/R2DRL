@@ -34,6 +34,10 @@
 
 
 #include <rcsc/trainer/trainer_agent.h>
+constexpr std::size_t align4_sz(std::size_t x) {
+    return (x + 3) & ~std::size_t(3);
+}
+
 
 class SampleTrainer
     : public rcsc::TrainerAgent {
@@ -41,9 +45,9 @@ private:
     // ===== Trainer ⟷ Python 极简 SHM 协议：2个flag + 1个int opcode =====
     // 只用到前8字节，其它空间作为预留
     static constexpr std::size_t TRAINER_SHM_SIZE = 4096;
-    static constexpr std::size_t T_FLAG_A = 0;  // uint8  (C++ 写)
-    static constexpr std::size_t T_FLAG_B = 1;  // uint8  (Python 写)
-    static constexpr std::size_t T_OPCODE = 4;  // int32  对齐到4
+    static constexpr std::size_t T_FLAG_A = 0;  
+    static constexpr std::size_t T_FLAG_B = 1;  
+    static constexpr std::size_t T_OPCODE = 4;  
     static constexpr const char* SHM_ENV_NAME = "RCSC_TRAINER_SHM";
 
     // 可选：给 opcode 起名，方便读代码（Python 只要写数字即可）
@@ -52,6 +56,7 @@ private:
         OP_RESET_TO_BKO  = 1,
         OP_SET_BALL_XY   = 2,   // 需要时在 .cpp 扩展额外参数布局
         OP_SET_PLAYER_XY = 3,
+        OP_RESET_FROM_PY = 10,
     };
 
     // 资源句柄
@@ -67,7 +72,40 @@ private:
     bool try_handle_trainer_ipc_();   // 检测 (A,B) 状态并处理一条指令（在 actionImpl() 里调用）
     void exec_opcode_(std::int32_t opcode); // 最小 switch 分发
 
+    // ====== payload offsets ======
+    // ball: (x,y,vx,vy) 4 floats
+    static constexpr std::size_t T_BALL_X  = align4_sz(T_OPCODE + sizeof(std::int32_t)); // 8
+    static constexpr std::size_t T_BALL_Y  = T_BALL_X + sizeof(float);               // 12
+    static constexpr std::size_t T_BALL_VX = T_BALL_Y + sizeof(float);               // 16
+    static constexpr std::size_t T_BALL_VY = T_BALL_VX + sizeof(float);              // 20
+
+    // players: 22 * (x,y,dir_deg)
+    static constexpr int N_LEFT  = 11;
+    static constexpr int N_RIGHT = 11;
+    static constexpr int N_PLAYERS = N_LEFT + N_RIGHT; // 22
+    static constexpr std::size_t PLAYER_STRIDE = 3 * sizeof(float); // 12 bytes
+
+    static constexpr std::size_t T_PLAYERS_BASE = align4_sz(T_BALL_VY + sizeof(float)); // 24
+
+    // 左队 i=0..10
+    static inline std::size_t T_LPX(int i){ return T_PLAYERS_BASE + i*PLAYER_STRIDE + 0*sizeof(float); }
+    static inline std::size_t T_LPY(int i){ return T_PLAYERS_BASE + i*PLAYER_STRIDE + 1*sizeof(float); }
+    static inline std::size_t T_LPD(int i){ return T_PLAYERS_BASE + i*PLAYER_STRIDE + 2*sizeof(float); }
+
+    // 右队 i=0..10
+    static constexpr std::size_t T_R_BASE = T_PLAYERS_BASE + N_LEFT*PLAYER_STRIDE;
+    static inline std::size_t T_RPX(int i){ return T_R_BASE + i*PLAYER_STRIDE + 0*sizeof(float); }
+    static inline std::size_t T_RPY(int i){ return T_R_BASE + i*PLAYER_STRIDE + 1*sizeof(float); }
+    static inline std::size_t T_RPD(int i){ return T_R_BASE + i*PLAYER_STRIDE + 2*sizeof(float); }
+
     // 轻量读写工具（inline 放头文件，减少 .cpp 负担）
+    inline float rdF_(std::size_t off) const {
+    return shm_ ? *(volatile float*)(shm_ + off) : 0.f;
+    }
+    inline void wrF_(std::size_t off, float v) {
+        if (shm_) *(volatile float*)(shm_ + off) = v;
+    }
+
     inline std::uint8_t rd8_(std::size_t off) const {
         return shm_ ? *(volatile std::uint8_t*)(shm_ + off) : 0;
     }
@@ -114,7 +152,7 @@ protected:
     void handlePlayerType();
 
 private:
-
+    void resetFromPython_();
     void sampleAction();
     void recoverForever();
     void doSubstitute();
