@@ -38,7 +38,6 @@ class Robocup2dEnv:
         self.team1 = self.args["team1"].lower()
         self.team2 = self.args["team2"]
 
-
         self.episode_limit=int(self.args["episode_limit"])
         self.goal_x = float(self.args["goal_x"])
         self.goal_y = float(self.args["goal_y"])
@@ -73,7 +72,6 @@ class Robocup2dEnv:
         self._port_lock_path = None
         self.t0=time.time()
 
-        
         # 子进程环境变量（把 LD_LIBRARY_PATH 配好）
         self.child_env = os.environ.copy()
         lib_paths = self.args.get("lib_paths", [])
@@ -478,7 +476,7 @@ class Robocup2dEnv:
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
 
-        ready_to_act, cycle, gm, ball = ipc.wait_until_playon_or_done(
+        ready_to_act, cycle0, gm, ball = ipc.wait_until_playon_or_done(
             cbuf=cbuf,
             begin_cycle=self.begin_cycle,
             episode_limit=episode_limit,
@@ -525,6 +523,7 @@ class Robocup2dEnv:
                 goal_y=GOAL_Y,
                 log=self.log,
                 tag="step wait until playon or done",
+                current_coach_cycle=cycle0
             )
             # print("ready_to_act after action submit:", ready_to_act)
             # 0) 看门狗：检查子进程是否都活着
@@ -532,8 +531,7 @@ class Robocup2dEnv:
             self.procs = alive
             if dead:
                 raise RuntimeError("[watchdog] child process died:\n" + dead_info)
-
-            
+        
             # print("after watchdog check")
             if ready_to_act:
                 # 3) 写完动作后：等下一帧全体 READY

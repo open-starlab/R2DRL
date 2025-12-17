@@ -169,6 +169,7 @@ def launch_coach(
         "-p", str(int(coach_port)),
         "-t", str(coach_team),
         "--shm-name", str(coach_shm_name),
+        "--server_wait_seconds", "30"
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))
@@ -216,6 +217,7 @@ def launch_players(
             "--debug_server_host", str(debug_host),
             "--debug_server_port", str(int(debug_port)),
             "--mode", str(mode),
+            "--server_wait_seconds", "30"
         ]
 
         shm_name = player_shm_by_key.get((team_idx, int(unum)))

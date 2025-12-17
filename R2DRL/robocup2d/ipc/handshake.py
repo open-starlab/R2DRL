@@ -132,6 +132,7 @@ def wait_until_playon_or_done(
     poll: float = 0.05,
     log=None,
     tag: str = "",
+    current_coach_cycle=None,
 ):
     """
     等待直到：
@@ -164,6 +165,11 @@ def wait_until_playon_or_done(
                     if log: log.info(msg)
                     raise RuntimeError(msg)
 
+        # ✅ 动作后：必须等到下一帧（cycle > current_coach_cycle）才允许返回
+        if current_coach_cycle is not None and cycle <= int(current_coach_cycle):
+            time.sleep(float(poll))
+            continue
+
         timeout = (begin_cycle >= 0) and ((cycle - begin_cycle) >= int(episode_limit))
         scored = (abs(float(ball[0])) >= float(goal_x)) and (abs(float(ball[1])) <= float(goal_y))
 
@@ -172,6 +178,6 @@ def wait_until_playon_or_done(
 
         if gm == 2:
             return True, cycle, gm, ball
-
+        
         time.sleep(float(poll))
 
