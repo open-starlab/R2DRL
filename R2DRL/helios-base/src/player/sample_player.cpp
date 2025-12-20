@@ -254,6 +254,11 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
     {
         return false;
     }
+    std::cerr << "[INIT] team=" << config().teamName()
+        << " mode=" << RUN_MODE_
+        << " cfg_dir=" << cfg_dir
+        << " shm_name=" << SHM_NAME
+        << std::endl;
 
     // 10) 读取 kick table
     std::string kick_path = cfg_dir + "/kick-table";
@@ -571,112 +576,146 @@ void SamplePlayer::setHybridActionMask()
 
 }
 
-
 void
 SamplePlayer::actionImpl()
 {
-    // 统一入口日志
+    const int unum = world().self().unum();
+    const int cyc = world().time().cycle();
+    const int gm  = static_cast<int>(world().gameMode().type());
+    std::cerr << "[HB] pid=" << ::getpid()
+            << " unum=" << unum
+            << " cyc=" << cyc
+            << " gm=" << int(world().gameMode().type())
+            << " mode=" << int(mode_)
+            << "\n";
+    auto shm_base = [&]() -> uint8_t* {
+        return shm_ptr ? static_cast<uint8_t*>(shm_ptr) : nullptr;
+    };
 
-    // ===========================================================
-    // === 1️⃣ PlayOn 模式：Python 同步控制版本（你的逻辑） ===
-    // ===========================================================
+    auto shm_flags = [&](volatile uint8_t*& A, volatile uint8_t*& B) -> bool {
+        uint8_t* base = shm_base();
+        if (!base) return false;
+        A = base + OFFSET_FLAG_A;
+        B = base + OFFSET_FLAG_B;
+        return true;
+    };
 
-    if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Base)
-    {
-        const int my_cycle = world().time().cycle();
+    // write B then fence then A (same ordering as your Python helper)
+    auto shm_set_flags = [&](volatile uint8_t* A, volatile uint8_t* B, uint8_t a, uint8_t b) {
+        *B = b;
+        std::atomic_thread_fence(std::memory_order_release);
+        *A = a;
+    };
 
+    auto cerr_flags = [&](const char* tag) {
         if (!shm_ptr) {
-            throw std::runtime_error("shm_ptr null in Base mode");
+            std::cerr << "[SHM][" << tag << "] cyc=" << cyc
+                      << " gm=" << gm
+                      << " mode=" << int(mode_)
+                      << " shm_ptr=null"
+                      << " kickable=" << int(world().self().isKickable())
+                      << " frozen=" << int(world().self().isFrozen())
+                      << " goalie=" << int(world().self().goalie())
+                      << "\n";
+            return;
         }
+        volatile uint8_t* A = nullptr;
+        volatile uint8_t* B = nullptr;
+        if (!shm_flags(A, B)) {
+            std::cerr << "[SHM][" << tag << "] cyc=" << cyc
+                      << " gm=" << gm
+                      << " mode=" << int(mode_)
+                      << " shm_flags=fail\n";
+            return;
+        }
+        std::cerr << "[SHM][" << tag << "] cyc=" << cyc
+                  << " gm=" << gm
+                  << " mode=" << int(mode_)
+                  << " flags=(" << int(*A) << "," << int(*B) << ")"
+                  << " kickable=" << int(world().self().isKickable())
+                  << " frozen=" << int(world().self().isFrozen())
+                  << " goalie=" << int(world().self().goalie())
+                  << "\n";
+    };
 
-        // === 写入 mask/state 到共享内存 ===
-        setActionMask();
-
-        writeSharedMemory();
-
-        // === 同步信号交互 ===
-        auto* base = static_cast<uint8_t*>(shm_ptr);
-        volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
-        volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
-
-        //  标志位01
-        // 通知 Python: 观测已准备好
-        std::atomic_thread_fence(std::memory_order_release);
-        *flag_A = 0;
-        *flag_B = 1;
-
-        // 等待 Python 写入动作并清零 flag
-        const int act = getActionFromSharedMemory();
-
-        // 执行动作
-        takeAction(act);
-
-        //  标志位11
-        // 通知 Python: 动作执行完毕
-        *flag_A = 1;
-        *flag_B = 1;
-        // 确保动作执行完毕后同步
-        std::atomic_thread_fence(std::memory_order_release);
-
-        return; // ✅ PlayOn 模式逻辑结束
+    // only spam around PlayOn entry
+    if (world().gameMode().type() == GameMode::PlayOn || cyc < 5) {
+        cerr_flags("enter");
     }
 
-    // === 1.5️⃣ Hybrid 模式：PlayOn 时由 Python 选择 a,u0,u1；失败则随机兜底 ===
-    // === 1.5️⃣ Hybrid 模式：严格执行传入动作；任何异常直接报错 ===
-
-    if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Hybrid)
+    // =========================
+    // PlayOn + Base
+    // =========================
+    if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Base)
     {
-        const int my_cycle = world().time().cycle();
+        if (!shm_ptr) throw std::runtime_error("shm_ptr null in Base mode");
 
-        if (!shm_ptr) {
-            throw std::runtime_error("shm_ptr null in Hybrid mode");
-        }
+        cerr_flags("Base:begin");
 
-        // 1) 写 mask/state 到共享内存（包含 17 位全量 mask 与 4 位 hybrid mask）
-        setHybridActionMask();
-
+        setActionMask();
         writeSharedMemory();
 
+        volatile uint8_t* flag_A = nullptr;
+        volatile uint8_t* flag_B = nullptr;
+        if (!shm_flags(flag_A, flag_B)) throw std::runtime_error("shm_flags failed (Base)");
+
+        // obs ready => (0,1)
+        shm_set_flags(flag_A, flag_B, 0, 1);
+        cerr_flags("Base:obs_ready");
+
+        const int act = getActionFromSharedMemory(); // TIMEOUT inside changed to 4500ms
+
+        takeAction(act);
+
+        // done => (1,1)
+        shm_set_flags(flag_A, flag_B, 1, 1);
+        cerr_flags("Base:done");
+        return;
+    }
+
+    // =========================
+    // PlayOn + Hybrid
+    // =========================
+    if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Hybrid)
+    {
+        if (!shm_ptr) throw std::runtime_error("shm_ptr null in Hybrid mode");
+
+        cerr_flags("Hybrid:begin");
+
+        setHybridActionMask();
+        writeSharedMemory();
         writeHybridMaskToSharedMemory();
 
-        auto* base = static_cast<uint8_t*>(shm_ptr);
-        volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
-        volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
-        // C++->Py: 观测就绪
-        std::atomic_thread_fence(std::memory_order_release);
-        *flag_A = 0;
-        *flag_B = 1;
+        volatile uint8_t* flag_A = nullptr;
+        volatile uint8_t* flag_B = nullptr;
+        if (!shm_flags(flag_A, flag_B)) throw std::runtime_error("shm_flags failed (Hybrid)");
 
-        // 2) 读取 Python 写回的 Hybrid 动作 & 参数（严格模式）
-        int   a   = -1;
-        float u0  = 0.5f;
-        float u1  = 0.5f;
+        // obs ready => (0,1)
+        shm_set_flags(flag_A, flag_B, 0, 1);
+        cerr_flags("Hybrid:obs_ready");
 
+        int   a  = -1;
+        float u0 = 0.5f;
+        float u1 = 0.5f;
 
-        // 没读到动作 → 直接抛错（不做任何兜底）
-        if (!readHybridActionFromSharedMemory(a, u0, u1)) {
+        if (!readHybridActionFromSharedMemory(a, u0, u1, /*timeout_ms=*/4500)) {
             std::ostringstream oss;
-            oss << "[Hybrid][ERROR] read action timeout/invalid at cycle="
-                << world().time().cycle();
+            oss << "[Hybrid][ERROR] read action timeout/invalid at cycle=" << world().time().cycle();
             throw std::runtime_error(oss.str());
         }
 
-        // 3) 掩码检查：被屏蔽的动作一律报错
         const auto m = getHybridActionMask();
-
         if (a < 0 || a > 3 || !m[a]) {
             std::ostringstream oss;
-            oss << "[Hybrid][ERROR] action blocked or invalid. a=" << a
+            oss << "[Hybrid][ERROR] action blocked/invalid a=" << a
                 << " mask={" << int(m[0]) << "," << int(m[1]) << ","
                 << int(m[2]) << "," << int(m[3]) << "}";
             throw std::runtime_error(oss.str());
         }
 
-        // 4) 真正执行；返回 false = 当前时刻条件不满足（如不可踢球/非门将等）→ 直接报错
-
         if (!takeHybridAction(a, double(u0), double(u1))) {
             std::ostringstream oss;
-            oss << "[Hybrid][ERROR] takeHybridAction failed. a=" << a
+            oss << "[Hybrid][ERROR] takeHybridAction failed a=" << a
                 << " u0=" << u0 << " u1=" << u1
                 << " kickable=" << world().self().isKickable()
                 << " goalie=" << world().self().goalie();
@@ -685,103 +724,73 @@ SamplePlayer::actionImpl()
 
         this->setNeckAction(new Neck_TurnToBallOrScan(0));
 
-        // 5) 只有成功执行时，才置 done：(A,B)=(1,1)
-        *flag_A = 1;
-        *flag_B = 1;
-        std::atomic_thread_fence(std::memory_order_release);
-
+        // done => (1,1)
+        shm_set_flags(flag_A, flag_B, 1, 1);
+        cerr_flags("Hybrid:done");
         return;
     }
 
-    // ===========================================================
-    // === 2️⃣ 非 PlayOn 模式：完全复原原版 HELIOS 行为系统 ===
-    // ===========================================================
+    // =========================
+    // Non-PlayOn (Helios original)
+    // =========================
+    cerr_flags("NonPlayOn:begin");
 
 
-    // (A) 只有 reset flags 需要 shm_ptr，就做个 if
     if (shm_ptr) {
-        auto* base = static_cast<uint8_t*>(shm_ptr);
-        volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
-        volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
-
-
-        *flag_A = 0;
-        *flag_B = 0;
-        std::atomic_thread_fence(std::memory_order_release);
-
-    } else {
-        // Helios/No-shm 情况是正常的，最多打个 log
+        volatile uint8_t* flag_A = nullptr;
+        volatile uint8_t* flag_B = nullptr;
+        if (shm_flags(flag_A, flag_B)) {
+            shm_set_flags(flag_A, flag_B, 0, 0);
+            std::cerr << "[SHM][NonPlayOn] cyc=" << cyc << " gm=" << gm << " set flags (0,0)\n";
+        }
     }
 
-    // Trainer message（原样保留，可无视）
-    if (this->audioSensor().trainerMessageTime() == world().time())
-    {
+    if (this->audioSensor().trainerMessageTime() == world().time()) {
+        // noop
     }
 
-    // 更新全局策略与场地分析
     Strategy::instance().update(world());
-
     FieldAnalyzer::instance().update(world());
 
-    // 准备行动链
-    M_field_evaluator = createFieldEvaluator();
-
+    M_field_evaluator  = createFieldEvaluator();
     M_action_generator = createActionGenerator();
-
     ActionChainHolder::instance().setFieldEvaluator(M_field_evaluator);
-
     ActionChainHolder::instance().setActionGenerator(M_action_generator);
 
-    // 特殊优先行为（铲球、意图等）
-    if (doPreprocess())
-    {
-        dlog.addText(Logger::TEAM, __FILE__": preprocess done");
+    if (doPreprocess()) {
+        std::cerr << "[HELIOS][preprocess] cyc=" << cyc << " gm=" << gm << "\n";
         return;
     }
 
-    // 更新行动链
     ActionChainHolder::instance().update(world());
-
-    // 创建当前角色
 
     SoccerRole::Ptr role_ptr =
         Strategy::i().createRole(world().self().unum(), world());
 
-    if (!role_ptr)
-    {
+    if (!role_ptr) {
         M_client->setServerAlive(false);
-        std::cerr << "No role assigned to player unum="
-                  << world().self().unum() << std::endl;
+        std::cerr << "No role assigned to player unum=" << world().self().unum() << std::endl;
         return;
     }
 
-    // 若角色接受执行，则直接执行（某些模式下会 override）
-    if (role_ptr->acceptExecution(world()))
-    {
+    if (role_ptr->acceptExecution(world())) {
         role_ptr->execute(this);
         return;
     }
 
-    if ( world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Helios)
-    {
-        role_ptr->execute( this );
+    if (world().gameMode().type() == GameMode::PlayOn && mode_ == Mode::Helios) {
+        role_ptr->execute(this);
         return;
     }
 
-    // PlayOn 之外模式分支
-
-    if (world().gameMode().isPenaltyKickMode())
-    {
-        dlog.addText(Logger::TEAM, __FILE__": penalty kick");
+    if (world().gameMode().isPenaltyKickMode()) {
         Bhv_PenaltyKick().execute(this);
         return;
     }
 
-    // 其他 SetPlay（KickOff, Corner, FreeKick 等）
     Bhv_SetPlay().execute(this);
-    //check
-
 }
+
 
 
 // sample_player.cpp

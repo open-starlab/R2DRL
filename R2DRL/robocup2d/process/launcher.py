@@ -138,8 +138,7 @@ def launch_trainer(
         trainer_exe,
         "-h", str(host),
         "-p", str(int(trainer_port)),
-        "--teaml", str(team1),
-        "--teamr", str(team2),
+        "--server_wait_seconds", "30",
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))

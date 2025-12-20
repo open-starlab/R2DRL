@@ -132,7 +132,21 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /usr/include/x86_64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/11/bits/charconv.h \
  /usr/include/c++/11/bits/basic_string.tcc /usr/include/c++/11/utility \
- /usr/include/c++/11/bits/stl_relops.h \
+ /usr/include/c++/11/bits/stl_relops.h /usr/include/c++/11/atomic \
+ /usr/include/c++/11/bits/atomic_base.h \
+ /usr/include/c++/11/bits/atomic_lockfree_defines.h \
+ /usr/include/c++/11/chrono /usr/include/c++/11/ratio \
+ /usr/include/c++/11/limits /usr/include/c++/11/ctime \
+ /usr/include/c++/11/bits/parse_numbers.h /usr/include/c++/11/thread \
+ /usr/include/c++/11/bits/std_thread.h /usr/include/c++/11/exception \
+ /usr/include/c++/11/bits/exception_ptr.h \
+ /usr/include/c++/11/bits/cxxabi_init_exception.h \
+ /usr/include/c++/11/typeinfo /usr/include/c++/11/bits/nested_exception.h \
+ /usr/include/c++/11/tuple /usr/include/c++/11/array \
+ /usr/include/c++/11/bits/uses_allocator.h \
+ /usr/include/c++/11/bits/invoke.h /usr/include/c++/11/bits/refwrap.h \
+ /usr/include/c++/11/bits/unique_ptr.h \
+ /usr/include/c++/11/bits/this_thread_sleep.h \
  /home/h_qin/local/include/rcsc/trainer/trainer_agent.h \
  /home/h_qin/local/include/rcsc/trainer/trainer_config.h \
  /home/h_qin/local/include/rcsc/coach/coach_world_model.h \
@@ -140,10 +154,7 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /home/h_qin/local/include/rcsc/coach/coach_ball_object.h \
  /home/h_qin/local/include/rcsc/geom/vector_2d.h \
  /home/h_qin/local/include/rcsc/geom/angle_deg.h \
- /usr/include/c++/11/functional /usr/include/c++/11/tuple \
- /usr/include/c++/11/array /usr/include/c++/11/bits/uses_allocator.h \
- /usr/include/c++/11/bits/invoke.h /usr/include/c++/11/bits/refwrap.h \
- /usr/include/c++/11/bits/std_function.h /usr/include/c++/11/typeinfo \
+ /usr/include/c++/11/functional /usr/include/c++/11/bits/std_function.h \
  /usr/include/c++/11/unordered_map \
  /usr/include/c++/11/ext/aligned_buffer.h \
  /usr/include/c++/11/bits/hashtable.h \
@@ -161,9 +172,6 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /usr/include/c++/11/bits/stl_tempbuf.h \
  /usr/include/c++/11/bits/uniform_int_dist.h /usr/include/c++/11/iostream \
  /usr/include/c++/11/ostream /usr/include/c++/11/ios \
- /usr/include/c++/11/exception /usr/include/c++/11/bits/exception_ptr.h \
- /usr/include/c++/11/bits/cxxabi_init_exception.h \
- /usr/include/c++/11/bits/nested_exception.h \
  /usr/include/c++/11/bits/ios_base.h \
  /usr/include/c++/11/bits/locale_classes.h \
  /usr/include/c++/11/bits/locale_classes.tcc \
@@ -190,8 +198,7 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h \
  /usr/include/x86_64-linux-gnu/bits/iscanonical.h \
- /usr/include/c++/11/bits/specfun.h /usr/include/c++/11/limits \
- /usr/include/c++/11/tr1/gamma.tcc \
+ /usr/include/c++/11/bits/specfun.h /usr/include/c++/11/tr1/gamma.tcc \
  /usr/include/c++/11/tr1/special_function_util.h \
  /usr/include/c++/11/tr1/bessel_function.tcc \
  /usr/include/c++/11/tr1/beta_function.tcc \
@@ -212,14 +219,11 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /home/h_qin/local/include/rcsc/game_mode.h /usr/include/c++/11/memory \
  /usr/include/c++/11/bits/stl_raw_storage_iter.h \
  /usr/include/c++/11/bits/align.h /usr/include/c++/11/bit \
- /usr/include/c++/11/bits/unique_ptr.h \
  /usr/include/c++/11/bits/shared_ptr.h \
  /usr/include/c++/11/bits/shared_ptr_base.h \
  /usr/include/c++/11/bits/allocated_ptr.h \
  /usr/include/c++/11/ext/concurrence.h \
  /usr/include/c++/11/bits/shared_ptr_atomic.h \
- /usr/include/c++/11/bits/atomic_base.h \
- /usr/include/c++/11/bits/atomic_lockfree_defines.h \
  /usr/include/c++/11/backward/auto_ptr.h \
  /usr/include/c++/11/pstl/glue_memory_defs.h \
  /usr/include/c++/11/pstl/execution_defs.h /usr/include/c++/11/list \
@@ -242,8 +246,8 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /home/h_qin/local/include/rcsc/math_util.h /usr/include/c++/11/algorithm \
  /usr/include/c++/11/pstl/glue_algorithm_defs.h \
  /home/h_qin/local/include/rcsc/param/param_map.h \
- /usr/include/c++/11/variant /usr/include/c++/11/bits/parse_numbers.h \
- /usr/include/c++/11/cassert /usr/include/assert.h \
+ /usr/include/c++/11/variant /usr/include/c++/11/cassert \
+ /usr/include/assert.h \
  /home/h_qin/local/include/rcsc/param/cmd_line_parser.h \
  /home/h_qin/local/include/rcsc/param/param_parser.h \
  /home/h_qin/local/include/rcsc/random.h /usr/include/c++/11/random \
@@ -251,7 +255,7 @@ sample_trainer-sample_trainer.o: sample_trainer.cpp \
  /usr/include/x86_64-linux-gnu/c++/11/bits/opt_random.h \
  /usr/include/c++/11/bits/random.tcc /usr/include/c++/11/numeric \
  /usr/include/c++/11/bits/stl_numeric.h \
- /usr/include/c++/11/pstl/glue_numeric_defs.h /usr/include/c++/11/ctime \
+ /usr/include/c++/11/pstl/glue_numeric_defs.h \
  /usr/include/x86_64-linux-gnu/sys/mman.h \
  /usr/include/x86_64-linux-gnu/bits/mman.h \
  /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h \
@@ -448,6 +452,28 @@ sample_trainer.h:
 /usr/include/c++/11/bits/basic_string.tcc:
 /usr/include/c++/11/utility:
 /usr/include/c++/11/bits/stl_relops.h:
+/usr/include/c++/11/atomic:
+/usr/include/c++/11/bits/atomic_base.h:
+/usr/include/c++/11/bits/atomic_lockfree_defines.h:
+/usr/include/c++/11/chrono:
+/usr/include/c++/11/ratio:
+/usr/include/c++/11/limits:
+/usr/include/c++/11/ctime:
+/usr/include/c++/11/bits/parse_numbers.h:
+/usr/include/c++/11/thread:
+/usr/include/c++/11/bits/std_thread.h:
+/usr/include/c++/11/exception:
+/usr/include/c++/11/bits/exception_ptr.h:
+/usr/include/c++/11/bits/cxxabi_init_exception.h:
+/usr/include/c++/11/typeinfo:
+/usr/include/c++/11/bits/nested_exception.h:
+/usr/include/c++/11/tuple:
+/usr/include/c++/11/array:
+/usr/include/c++/11/bits/uses_allocator.h:
+/usr/include/c++/11/bits/invoke.h:
+/usr/include/c++/11/bits/refwrap.h:
+/usr/include/c++/11/bits/unique_ptr.h:
+/usr/include/c++/11/bits/this_thread_sleep.h:
 /home/h_qin/local/include/rcsc/trainer/trainer_agent.h:
 /home/h_qin/local/include/rcsc/trainer/trainer_config.h:
 /home/h_qin/local/include/rcsc/coach/coach_world_model.h:
@@ -456,13 +482,7 @@ sample_trainer.h:
 /home/h_qin/local/include/rcsc/geom/vector_2d.h:
 /home/h_qin/local/include/rcsc/geom/angle_deg.h:
 /usr/include/c++/11/functional:
-/usr/include/c++/11/tuple:
-/usr/include/c++/11/array:
-/usr/include/c++/11/bits/uses_allocator.h:
-/usr/include/c++/11/bits/invoke.h:
-/usr/include/c++/11/bits/refwrap.h:
 /usr/include/c++/11/bits/std_function.h:
-/usr/include/c++/11/typeinfo:
 /usr/include/c++/11/unordered_map:
 /usr/include/c++/11/ext/aligned_buffer.h:
 /usr/include/c++/11/bits/hashtable.h:
@@ -484,10 +504,6 @@ sample_trainer.h:
 /usr/include/c++/11/iostream:
 /usr/include/c++/11/ostream:
 /usr/include/c++/11/ios:
-/usr/include/c++/11/exception:
-/usr/include/c++/11/bits/exception_ptr.h:
-/usr/include/c++/11/bits/cxxabi_init_exception.h:
-/usr/include/c++/11/bits/nested_exception.h:
 /usr/include/c++/11/bits/ios_base.h:
 /usr/include/c++/11/bits/locale_classes.h:
 /usr/include/c++/11/bits/locale_classes.tcc:
@@ -521,7 +537,6 @@ sample_trainer.h:
 /usr/include/x86_64-linux-gnu/bits/mathcalls-narrow.h:
 /usr/include/x86_64-linux-gnu/bits/iscanonical.h:
 /usr/include/c++/11/bits/specfun.h:
-/usr/include/c++/11/limits:
 /usr/include/c++/11/tr1/gamma.tcc:
 /usr/include/c++/11/tr1/special_function_util.h:
 /usr/include/c++/11/tr1/bessel_function.tcc:
@@ -545,14 +560,11 @@ sample_trainer.h:
 /usr/include/c++/11/bits/stl_raw_storage_iter.h:
 /usr/include/c++/11/bits/align.h:
 /usr/include/c++/11/bit:
-/usr/include/c++/11/bits/unique_ptr.h:
 /usr/include/c++/11/bits/shared_ptr.h:
 /usr/include/c++/11/bits/shared_ptr_base.h:
 /usr/include/c++/11/bits/allocated_ptr.h:
 /usr/include/c++/11/ext/concurrence.h:
 /usr/include/c++/11/bits/shared_ptr_atomic.h:
-/usr/include/c++/11/bits/atomic_base.h:
-/usr/include/c++/11/bits/atomic_lockfree_defines.h:
 /usr/include/c++/11/backward/auto_ptr.h:
 /usr/include/c++/11/pstl/glue_memory_defs.h:
 /usr/include/c++/11/pstl/execution_defs.h:
@@ -580,7 +592,6 @@ sample_trainer.h:
 /usr/include/c++/11/pstl/glue_algorithm_defs.h:
 /home/h_qin/local/include/rcsc/param/param_map.h:
 /usr/include/c++/11/variant:
-/usr/include/c++/11/bits/parse_numbers.h:
 /usr/include/c++/11/cassert:
 /usr/include/assert.h:
 /home/h_qin/local/include/rcsc/param/cmd_line_parser.h:
@@ -593,7 +604,6 @@ sample_trainer.h:
 /usr/include/c++/11/numeric:
 /usr/include/c++/11/bits/stl_numeric.h:
 /usr/include/c++/11/pstl/glue_numeric_defs.h:
-/usr/include/c++/11/ctime:
 /usr/include/x86_64-linux-gnu/sys/mman.h:
 /usr/include/x86_64-linux-gnu/bits/mman.h:
 /usr/include/x86_64-linux-gnu/bits/mman-map-flags-generic.h:

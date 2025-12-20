@@ -128,7 +128,7 @@ def wait_until_playon_or_done(
     episode_limit: int,
     goal_x: float,
     goal_y: float,
-    max_stall_sec: float = 2.0,   # cycle 不前进超过这个秒数就判定卡死
+    max_stall_sec: float = 5.0,   # cycle 不前进超过这个秒数就判定卡死
     poll: float = 0.05,
     log=None,
     tag: str = "",

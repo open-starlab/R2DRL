@@ -48,7 +48,11 @@
 #include <cstdlib>   // getenv
 #include <cstring>   // memset
 #include <iostream>  // cerr
-
+#include <cstdint>
+#include <utility>
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 using namespace rcsc;
 
@@ -154,21 +158,9 @@ bool SampleTrainer::init_shm_()
     std::cerr << "[trainer] shm attached: " << shm_name_
               << " size=" << shm_size_ << std::endl;
 
-        // ===== 在这里加入：把 trainer flags 初始化为 READY(0,1) =====
-    // 只在初始是 (0,0) 的情况下设置，避免覆盖正在运行的握手状态
-    {
-        const std::uint8_t A = rd8_(T_FLAG_A);
-        const std::uint8_t B = rd8_(T_FLAG_B);
-        if (A == 0 && B == 0) {
-            wr8_(T_FLAG_A, 0);
-            wr8_(T_FLAG_B, 1);
-            std::cerr << "[trainer][IPC] init flags -> READY(0,1)\n";
-        } else {
-            std::cerr << "[trainer][IPC] keep existing flags A=" << int(A)
-                      << " B=" << int(B) << "\n";
-        }
-    }
-    // ===========================================================
+    const std::uint8_t A = rd8_(T_FLAG_A);
+    const std::uint8_t B = rd8_(T_FLAG_B);
+
     
     return (shm_ready_ = true);
 }
@@ -355,24 +347,70 @@ void SampleTrainer::resetFromPython_()
 void
 SampleTrainer::actionImpl()
 {
-    if (shm_ready_) {
-        (void)try_handle_trainer_ipc_();
-        std::cerr << "[trainer] actionImpl: handled trainer IPC.\n" << std::endl;
-    }
+    // 1) 队名
     if ( world().teamNameLeft().empty() )
     {
         doTeamNames();
+        std::cerr << "[trainer][ERR] teamNameLeft empty -> doTeamNames()\n";
+        if ( world().teamNameLeft().empty() ) {
+            std::cerr << "[trainer][ERR] doTeamNames() but still empty, return.\n";
+            return;
+        }
+    }
+
+    // 2) shm
+    if (!shm_ready_ || !shm_) {
+        std::cerr << "[trainer][ERR] shm not ready, return.\n";
         return;
     }
 
-    //////////////////////////////////////////////////////////////////
-    // Add your code here.
+    // 3) 只在 PlayOn 处理（否则直接 return）
+    //    这里的接口名按 rcsc 常见写法；如果你编译报错，把这一行换成你工程里正确的取 playmode 的函数即可
+    if ( world().gameMode().type() != GameMode::PlayOn ) {
+        std::cerr << "[trainer][ERR] not PlayOn (pm=" << world().gameMode().type()
+                  << "), skip IPC.\n";
+        return;
+    }
+    else{
+        std::cerr << "[trainer]PlayOn mode, ready for IPC.\n";
+        // 4) flags：不要覆盖 11；只在 (0,0) 时初始化为 (0,1)
+        auto [a0, b0] = trainer_flags(shm_);
+        std::cerr << "[trainer][IPC] current flags A=" << int(a0)
+                  << " B=" << int(b0) << "\n";
+        if (((a0 == 0 && b0 == 0) or (a0 == 1 && b0 == 1))){
+            trainer_set_ready(shm_);  // -> 01
+        }
+        else{
+            std::cerr << "[trainer][IPC] keep existing flags A=" << int(a0)
+                      << " B=" << int(b0) << "\n";
+            return;
+        }
+        // 5) 等到 Python 写入 10（超时返回并报错）
+        if (!(a0 == 1 && b0 == 0)) {
+            if (!wait_trainer_request(shm_)) {
+                std::cerr << "[trainer][ERR] wait_trainer_request() timeout, return.\n";
+                return;
+            }
+        } else {
+            // 已经是 10，也做一次 acquire，保证后续读 payload 可见
+            trainer_acquire_fence();
+        }
 
-    //sampleAction();
-    //recoverForever();
-    //doSubstitute();
-    doKeepaway();
+        // 6) ===== 只有这里是“执行动作的分支” =====
+        const std::int32_t opcode = rd32_(T_OPCODE);
+        std::cerr << "[trainer][IPC] got request opcode=" << opcode << "\n";
+        exec_opcode_(opcode);
+
+        // 可选：清 opcode，防止重复执行
+        wr32_(T_OPCODE, OP_NOP);
+
+        // 7) 按你要求：结束写 11
+        trainer_set_ack11(shm_);
+        return;
+    }
+    
 }
+
 
 /*-------------------------------------------------------------------*/
 /*!

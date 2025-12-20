@@ -70,8 +70,7 @@ class Robocup2dEnv:
         self._closed = False            # close() 里也建议加保护
         self._port_lock_fd = None
         self._port_lock_path = None
-        self.t0=time.time()
-
+        self.pass_trainer = False
         # 子进程环境变量（把 LD_LIBRARY_PATH 配好）
         self.child_env = os.environ.copy()
         lib_paths = self.args.get("lib_paths", [])
@@ -153,7 +152,7 @@ class Robocup2dEnv:
 
             except Exception as e:
                 last_err = e
-                self.log.warning(f"[reset] attempt={attempt} failed: {e!r}")
+                # self.log.warning(f"[reset] attempt={attempt} failed: {e!r}")
                 time.sleep(0.2)
 
         raise RuntimeError(f"[reset] failed after {max_retries+1} attempts. last_err={last_err!r}")
@@ -209,7 +208,7 @@ class Robocup2dEnv:
 
         # 2) coach/trainer buf（你现在 trainer 还没用到，可以先保留）
         cbuf = self.coach_shms[self.coach_name].buf
-        # tbuf = self.trainer_shms[self.trainer_name].buf
+        tbuf = self.trainer_shms[self.trainer_name].buf
 
         # 3) 等 gm==PlayOn(2)
         t_end = time.monotonic() + 20.0
@@ -228,7 +227,6 @@ class Robocup2dEnv:
 
             if gm == 2:
                 self.begin_cycle = cycle
-                break
 
             time.sleep(0.05)
 
@@ -256,6 +254,15 @@ class Robocup2dEnv:
             log=self.log,
             tag="reset first-frame barrier",
         )
+
+        tflags=P.trainer.read_flags(tbuf)
+        if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=10000, poll_us=500):
+            raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
+        P.trainer.write_fixed_reset(tbuf)
+        P.trainer.write_opcode(tbuf, 10)
+        # 3) 翻 flags -> REQ(1,0) 提交请求
+        ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
+        self.pass_trainer = True
 
         print("Reset Over!!!")
         return
@@ -392,21 +399,21 @@ class Robocup2dEnv:
         time.sleep(0.2)
 
         # trainer
-        # p, _ = proc.launch_trainer(
-        #     trainer_dir=str(self.args["trainer_dir"]),
-        #     trainer_exe=str(self.args["trainer_exe"]),
-        #     host=str(self.args["host"]),
-        #     trainer_port=int(self.trainer_port),
-        #     team1=self.team1,
-        #     team2=self.team2,
-        #     logs_dir=self.log_dir,
-        #     trainer_shm_name=str(self.trainer_name),
-        #     env=env,
-        #     log_tag=f"{self.run_id}_",
-        # )
-        # self.procs.append(p)
+        p, _ = proc.launch_trainer(
+            trainer_dir=str(self.args["trainer_dir"]),
+            trainer_exe=str(self.args["trainer_exe"]),
+            host=str(self.args["host"]),
+            trainer_port=int(self.trainer_port),
+            team1=self.team1,
+            team2=self.team2,
+            logs_dir=self.log_dir,
+            trainer_shm_name=str(self.trainer_name),
+            env=env,
+            log_tag=f"{self.run_id}_",
+        )
+        self.procs.append(p)
         # self.log.info(f"[{where}][trainer] pid={p.pid} port={int(self.trainer_port)} shm={self.trainer_name}")
-        # time.sleep(0.2)
+        time.sleep(0.2)
 
         self._collect_run_pgids()
 
@@ -426,8 +433,7 @@ class Robocup2dEnv:
         """
         # print("Step!!!")
         # 0) watchdog
-        self.t1=time.time()
-        # print(f"[time]{self.t1-self.t0}")
+
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="step0")
         self.procs = alive
         if dead:
@@ -497,8 +503,19 @@ class Robocup2dEnv:
                 log=self.log,
                 tag="step pre-ready barrier",
             )
+        if ready_to_act and not self.pass_trainer:    
+            trainer_shm = self.trainer_shms[self.trainer_name]   # 按你项目里的实际字段名
+            tbuf = trainer_shm.buf
+            tflags=P.trainer.read_flags(tbuf)
 
-        # print("ready_to_write_act")
+            if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=10000, poll_us=500):
+                raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
+            # P.trainer.write_fixed_reset(tbuf)
+            P.trainer.write_opcode(tbuf, 8)
+            # 3) 翻 flags -> REQ(1,0) 提交请求
+            ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
+        
+        self.pass_trainer = False
 
         # 2) 写动作（只在 PlayOn 同步点写）
         if ready_to_act and n_agents > 0:
@@ -588,7 +605,6 @@ class Robocup2dEnv:
         self.procs = alive
         if dead:
             raise RuntimeError("[watchdog] child process died:\n" + dead_info)
-
 
         # keys 稳定顺序（并缓存，避免每步排序开销/顺序抖动）
         keys = getattr(self, "_obs_keys", None)
