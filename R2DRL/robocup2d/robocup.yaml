@@ -16,6 +16,8 @@ env_args:
   server_path: "/fsws1/h_qin/robocup/robocup/rcssserver/build/rcssserver"
   trainer_dir: "/fsws1/h_qin/robocup/robocup/helios-base/src/trainer"
   trainer_exe: "./sample_trainer"
+  config_dir: "../formations-dt"
+  player_config: "../player.conf"
   logs_dir: "./log"
   coach_port_offset: 2
   debug_port_offset: 8

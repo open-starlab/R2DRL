@@ -119,7 +119,7 @@ class Robocup2dEnv:
             buf = self.player_shms[name].buf
 
             # Base mask (17) or Hybrid mask (4)
-            if getattr(self, "action_mode", "base") == "hybrid":
+            if self.team1 == "hybrid":
                 m = np.frombuffer(buf, dtype=np.uint8, count=4, offset=P.player.OFFSET_HYBRID_MASK)
             else:
                 m = np.frombuffer(buf, dtype=np.uint8, count=17, offset=P.player.OFFSET_MASK)
@@ -367,6 +367,8 @@ class Robocup2dEnv:
             player_exe=str(self.args["player_exe"]),
             host=str(self.args["host"]),
             server_port=int(self.server_port),
+            player_config=str(self.args["player_config"]),
+            config_dir=str(self.args["config_dir"]),
             debug_host=str(self.args["host"]),
             debug_port=int(self.debug_port),
             team1=self.team1,
