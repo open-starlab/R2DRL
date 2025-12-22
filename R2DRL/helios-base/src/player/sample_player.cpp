@@ -663,7 +663,7 @@ SamplePlayer::actionImpl()
         shm_set_flags(flag_A, flag_B, 0, 1);
         cerr_flags("Base:obs_ready");
 
-        const int act = getActionFromSharedMemory(); // TIMEOUT inside changed to 4500ms
+        const int act = getActionFromSharedMemory(); // TIMEOUT inside changed to 45000ms
 
         takeAction(act);
 
@@ -698,7 +698,7 @@ SamplePlayer::actionImpl()
         float u0 = 0.5f;
         float u1 = 0.5f;
 
-        if (!readHybridActionFromSharedMemory(a, u0, u1, /*timeout_ms=*/4500)) {
+        if (!readHybridActionFromSharedMemory(a, u0, u1, /*timeout_ms=*/45000)) {
             std::ostringstream oss;
             oss << "[Hybrid][ERROR] read action timeout/invalid at cycle=" << world().time().cycle();
             throw std::runtime_error(oss.str());
