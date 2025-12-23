@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from multiprocessing import shared_memory
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Iterable
 
 def create_shm(
     name: str,
@@ -14,7 +14,7 @@ def create_shm(
     try:
         shm = shared_memory.SharedMemory(name=name, create=True, size=int(size))
         if zero_fill:
-            shm.buf[:] = b"\x00" * size  # 广播填充，不用 * size
+            shm.buf[:] = b"\x00" * size  # Broadcast fill, avoids using * size for each element
         # if log:
         #     log.info(f"[shm] created name={name} size={size} zero_fill={zero_fill}")
         return shm
@@ -40,9 +40,9 @@ def create_shm_many_3lists(
     Dict[str, shared_memory.SharedMemory],
 ]:
     """
-    返回 (coach_owners, trainer_owners, player_owners)
-    其中每个都是 {name: SharedMemory}（owner 句柄）。
-    任意一个创建失败：回滚已创建的全部 shm。
+    Returns (coach_owners, trainer_owners, player_owners),
+    each is a dict {name: SharedMemory} (owner handle).
+    If any creation fails, roll back and clean up all created SHMs.
     """
     coach_owners: Dict[str, shared_memory.SharedMemory] = {}
     trainer_owners: Dict[str, shared_memory.SharedMemory] = {}
@@ -62,13 +62,17 @@ def create_shm_many_3lists(
         return coach_owners, trainer_owners, player_owners
 
     except Exception:
-        # 回滚：把已经创建的 shm 全部清掉
+        # Rollback: clean up all already created SHMs
         for d in (coach_owners, trainer_owners, player_owners):
             for shm in d.values():
-                try: shm.close()
-                except Exception: pass
-                try: shm.unlink()
-                except Exception: pass
+                try: 
+                    shm.close()
+                except Exception: 
+                    pass
+                try: 
+                    shm.unlink()
+                except Exception: 
+                    pass
         raise
 
 
@@ -116,8 +120,8 @@ def make_shm_name(
     kind: str,          # "player" | "coach" | "trainer"
     team1: str,
     team2: str,
-    team_idx: int = 1,  # 1 or 2 (player/coach 用)
-    unum: int = 1,      # 1..11 (player 用)
+    team_idx: int = 1,  # 1 or 2 (used for player/coach)
+    unum: int = 1,      # 1..11 (used for player)
     prefix: str = "robocup2drl_",
 ) -> str:
     def san(s: str) -> str:

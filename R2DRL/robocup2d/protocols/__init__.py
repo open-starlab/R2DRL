@@ -11,4 +11,4 @@ class Protocols:
 
 P = Protocols()
 
-__all__ = ["P", "Protocols", "common", "player_shm", "coach_shm", "trainer_shm"]
+__all__ = ["P"]

@@ -2,11 +2,10 @@
 from __future__ import annotations
 import torch
 import uuid
-from typing import List, Optional
 from .protocols import P
 from . import process as proc
 from . import ipc as ipc
-from .logging_utils import setup_line_buffering, get_env_logger
+from .logging_utils import get_env_logger
 from .config import load_env_args
 import os
 import time
@@ -15,20 +14,18 @@ import signal
 
 
 class Robocup2dEnv:
-    """PyMARL-friendly env wrapper (scaffold)."""
+    """PyMARL-friendly env wrapper."""
 
     def __init__(self, cfg="robocup.yaml", **env_args):
         """
-        创建shm
-        创建子进程
+        Create shared memory and child processes.
         """
         
-        #主程序输出
-        setup_line_buffering()
+        # Setup main program output
         self.log = get_env_logger("robocup_env")
         self.log.info("[Robocup2dEnv] init scaffold OK")
 
-        # 读取yaml配置
+        # Load yaml configuration
         self.cfg = cfg
         self.env_args = env_args
         self.args = load_env_args(cfg, env_args)        
@@ -38,7 +35,7 @@ class Robocup2dEnv:
         self.team1 = self.args["team1"].lower()
         self.team2 = self.args["team2"]
 
-        self.episode_limit=int(self.args["episode_limit"])
+        self.episode_limit = int(self.args["episode_limit"])
         self.goal_x = float(self.args["goal_x"])
         self.goal_y = float(self.args["goal_y"])
         self.half_length = float(self.args["HALF_LENGTH"])
@@ -66,12 +63,12 @@ class Robocup2dEnv:
         self.last_state = None
         self.done = 0
         self.last_obs = None
-        self.last_avail_actions = None  # 你后面大概率也会用
-        self._closed = False            # close() 里也建议加保护
+        self.last_avail_actions = None  # Likely to be used later
+        self._closed = False            # Protection suggested in close()
         self._port_lock_fd = None
         self._port_lock_path = None
         self.pass_trainer = False
-        # 子进程环境变量（把 LD_LIBRARY_PATH 配好）
+        # Child process environment variables (configure LD_LIBRARY_PATH)
         self.child_env = os.environ.copy()
         lib_paths = self.args.get("lib_paths", [])
         base_ld = os.environ.get("LD_LIBRARY_PATH", "")
@@ -82,24 +79,22 @@ class Robocup2dEnv:
                 merged = merged + ":" + base_ld
             self.child_env["LD_LIBRARY_PATH"] = merged
         else:
-            # 如果 yaml 里没配，就沿用外面的
+            # If not configured in yaml, use the external one
             self.child_env["LD_LIBRARY_PATH"] = base_ld
 
         self.log.info(f"[child_env] LD_LIBRARY_PATH={self.child_env.get('LD_LIBRARY_PATH', '')}")
         self._start_run(where="init")
+
+        self._act_keys = sorted(self.player_names.keys())
+        self._obs_keys = sorted(self.player_names.keys())
+        self.n_agents = self.n1
         
     def get_avail_actions(self):
         if self.done == 1 and self.last_avail_actions is not None:
             return self.last_avail_actions
 
-        # 先确保所有球员 READY（和 get_obs 一样）
-        keys = getattr(self, "_obs_keys", None)
-        if keys is None:
-            keys = sorted(self.player_names.keys())
-            self._obs_keys = keys
-
         bufs = []
-        for k in keys:
+        for k in self._obs_keys:
             name = self.player_names[k]
             bufs.append((self.player_shms[name].buf, f"{k} {name}"))
 
@@ -114,7 +109,7 @@ class Robocup2dEnv:
         )
 
         masks = []
-        for k in keys:
+        for k in self._obs_keys:
             name = self.player_names[k]
             buf = self.player_shms[name].buf
 
@@ -130,44 +125,30 @@ class Robocup2dEnv:
         self.last_avail_actions = out
         return out
 
-    # ----------------- API placeholders -----------------
     def reset(self):
         if self._closed:
             raise RuntimeError("env already closed; create a new env instance")
 
-        max_retries = int(self.args["reset_retries"])
-        last_err = None
+        # Critical: Clean up old processes for each attempt (keep shm/run_id)
+        self._teardown_procs_only()
+        self._clear_shm_all()
 
-        for attempt in range(max_retries + 1):
-            try:
-                # 关键：每次 attempt 都先把旧进程清掉（不动 shm/run_id）
-                self._teardown_procs_only()
-                self._clear_shm_all()
+        self._start_procs_only(where="reset")
 
-                self._start_procs_only(where=f"reset attempt={attempt}")
-
-                # 真正 reset 逻辑
-                self._reset_once_no_reconnect()
-                return
-
-            except Exception as e:
-                last_err = e
-                # self.log.warning(f"[reset] attempt={attempt} failed: {e!r}")
-                time.sleep(0.2)
-
-        raise RuntimeError(f"[reset] failed after {max_retries+1} attempts. last_err={last_err!r}")
+        # Actual reset logic
+        self._reset_once_no_reconnect()
 
     def _clear_shm_all(self, *, clear_players=True, clear_coach=True, clear_trainer=True) -> None:
         """
-        将已创建/attach 的 shm 缓冲区全部写 0。
-        注意：最好在旧进程已停止后调用（例如 reset 的 _teardown_procs_only 之后）。
+        Zero out all created/attached shm buffers.
+        Note: Best called after old processes have stopped (e.g., after _teardown_procs_only in reset).
         """
         def _zero_one(shm_obj, tag: str):
             if shm_obj is None:
                 return
             try:
                 buf = shm_obj.buf  # memoryview
-                # 不分配巨大的 bytes；直接用 numpy 覆写
+                # Do not allocate huge bytes; overwrite directly with numpy
                 arr = np.frombuffer(buf, dtype=np.uint8)
                 arr[:] = 0
             except Exception as e:
@@ -185,7 +166,7 @@ class Robocup2dEnv:
             for name, shm in getattr(self, "player_shms", {}).items():
                 _zero_one(shm, f"player:{name}")
 
-        # 保险：清 Python 侧缓存（可选，但一般顺手一起做）
+        # Safety: Clear Python side cache (optional, but usually done together)
         self.begin_cycle = -1
         self.last_state = None
         self.last_obs = None
@@ -199,18 +180,18 @@ class Robocup2dEnv:
         if dead:
             raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-        # 1) 清缓存/标志
+        # 1) Clear cache/flags
         self.last_state = None
         self.last_obs = None
         self.last_avail_actions = None
         self.done = 0
         self.begin_cycle = -1
 
-        # 2) coach/trainer buf（你现在 trainer 还没用到，可以先保留）
+        # 2) coach/trainer buf (trainer not used yet, can be kept)
         cbuf = self.coach_shms[self.coach_name].buf
         tbuf = self.trainer_shms[self.trainer_name].buf
 
-        # 3) 等 gm==PlayOn(2)
+        # 3) Wait for gm==PlayOn(2)
         t_end = time.monotonic() + 20.0
         while time.monotonic() < t_end:
             alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect1")
@@ -231,16 +212,10 @@ class Robocup2dEnv:
             time.sleep(0.05)
 
         if self.begin_cycle < 0:
-            raise TimeoutError("[reset] 等待进入 PlayOn 超时")
-
-        # 4) 首帧 barrier：全体 player READY
-        keys = getattr(self, "_obs_keys", None)
-        if keys is None:
-            keys = sorted(self.player_names.keys())
-            self._obs_keys = keys
+            raise TimeoutError("[reset] Timeout waiting for PlayOn")
 
         bufs = []
-        for k in keys:
+        for k in self._obs_keys:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
@@ -260,7 +235,7 @@ class Robocup2dEnv:
             raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
         P.trainer.write_fixed_reset(tbuf)
         P.trainer.write_opcode(tbuf, 10)
-        # 3) 翻 flags -> REQ(1,0) 提交请求
+        # 3) Flip flags -> REQ(1,0) Submit request
         ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
         self.pass_trainer = True
 
@@ -271,7 +246,7 @@ class Robocup2dEnv:
         if self._closed:
             raise RuntimeError("env already closed; create a new env instance")
 
-        # 启动函数不负责 teardown
+        # Start function is not responsible for teardown
         if self.run_id is not None or self.procs or self._shm_names:
             raise RuntimeError("run already started; call _reconnect_run or _teardown_run first")
 
@@ -280,7 +255,7 @@ class Robocup2dEnv:
         self._lock_fd = proc.acquire_run_lock(self.run_id, log=self.log)
         self.log.info(f"[{where}] run_id={self.run_id}")
 
-        # 选端口
+        # Select ports
         (self.base_port, self.server_port, self.trainer_port, self.coach_port, self.debug_port,
         self._port_lock_fd, self._port_lock_path) = proc.pick_ports(
             self.args["auto_port_start"], self.args["auto_port_end"],
@@ -288,14 +263,14 @@ class Robocup2dEnv:
             self.args["coach_port_offset"], self.args["debug_port_offset"],
         )
 
-        # log/rcg 目录
+        # log/rcg directories
         base_logs_dir = os.path.abspath(str(self.args["logs_dir"]))
         self.log_dir = os.path.join(base_logs_dir, self.run_id)
         os.makedirs(self.log_dir, exist_ok=True)
         self.rcg_dir = os.path.join(self.log_dir, "rcg")
         os.makedirs(self.rcg_dir, exist_ok=True)
 
-        # 清运行期字段
+        # Clear runtime fields
         self.begin_cycle = -1
         self.last_state = None
         self.last_obs = None
@@ -326,19 +301,19 @@ class Robocup2dEnv:
 
     def _start_procs_only(self, where: str = "reset") -> None:
         """
-        负责：
-        - 如有旧 run：teardown
-        - 生成 run_id + lock
-        - 选端口、建 log/rcg 目录
-        - 生成 shm 名字并创建 shm
-        - 拉起 server/players/coach
-        - 收集 pgid/pid
-        - 清空缓存字段（last_state/obs/avail/done/begin_cycle）
+        Responsibilities:
+        - Teardown if old run exists
+        - Generate run_id + lock
+        - Select ports, create log/rcg directories
+        - Generate shm names and create shm
+        - Launch server/players/coach
+        - Collect pgid/pid
+        - Clear cache fields (last_state/obs/avail/done/begin_cycle)
         """
         env = dict(self.child_env)
         env["ROBOCUP2DRL_RUN_ID"] = self.run_id
 
-        # 清运行期字段
+        # Clear runtime fields
         self.begin_cycle = -1
         self.procs = []
         self.last_state = None
@@ -419,67 +394,52 @@ class Robocup2dEnv:
 
         self._collect_run_pgids()
 
-        # 删除缓存 key（避免顺序/keys 继承上一次）
-        if hasattr(self, "_obs_keys"):
-            delattr(self, "_obs_keys")
-        if hasattr(self, "_act_keys"):
-            delattr(self, "_act_keys")
-
     def step(self, actions):
         """
-        1) watchdog：子进程死了直接抛错
-        2) 等待进入 PlayOn 且所有受控 agent READY
-        3) 写动作 + submit_req
-        4) 再等下一帧所有 READY
-        5) 读 coach 结算：goal / timeover / timeout
+        1) Watchdog: Raise error if child process dies
+        2) Wait for PlayOn and all controlled agents READY
+        3) Write actions + submit_req
+        4) Wait for next frame all READY
+        5) Read coach settlement: goal / timeover / timeout
         """
         # print("Step!!!")
-        # 0) watchdog
+        # 0) Watchdog
 
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="step0")
         self.procs = alive
         if dead:
             raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-        # done=1 还 step：保持旧版习惯直接返回
+        # Step even if done=1: Keep old habit, return directly
         if self.done == 1:
             return 0.0, True, {"episode_limit": 0.0}
 
-        # keys 稳定顺序（缓存，避免每步 sort）
-        keys = getattr(self, "_act_keys", None)
-        if keys is None:
-            keys = sorted(self.player_names.keys())  # (team_idx, unum)
-            self._act_keys = keys
-        n_agents = len(keys)
-
-        # actions -> numpy（兼容 torch）
+        # actions -> numpy (compatible with torch)
         if isinstance(actions, torch.Tensor):
             actions = actions.detach().cpu().numpy()
         actions = np.asarray(actions)
         # print("actions:", actions)
 
-        # 判定 Base/Hybrid（Hybrid 为 (n,3)）
+        # Determine Base/Hybrid (Hybrid is (n,3))
         is_hybrid = (actions.ndim == 2 and actions.shape[1] == 3)
         # print("is_hybrid:", is_hybrid)
         if is_hybrid:
-            if not (actions.shape[0] == n_agents and actions.shape[1] == 3):
-                raise RuntimeError(f"Hybrid 期望 actions.shape=(n_agents,3)，收到 {actions.shape}")
+            if not (actions.shape[0] == self.n_agents and actions.shape[1] == 3):
+                raise RuntimeError(f"Hybrid expects actions.shape=(n_agents,3), received {actions.shape}")
         else:
             actions = actions.reshape(-1)
-            if actions.shape[0] != n_agents:
-                raise RuntimeError(f"Base 期望 {n_agents} 个动作，收到 {actions.shape[0]}")
+            if actions.shape[0] != self.n_agents:
+                raise RuntimeError(f"Base expects {self.n_agents} actions, received {actions.shape[0]}")
 
         # coach buf
         coach_shm = self.coach_shms[self.coach_name]
         cbuf = coach_shm.buf
 
-        episode_limit = self.episode_limit
-        GOAL_X = self.goal_x
-        GOAL_Y = self.goal_y
+        # episode_limit = self.episode_limit
 
-        # 提前准备 bufs（barrier 用）
+        # Prepare bufs in advance (for barrier)
         bufs = []
-        for k in keys:
+        for k in self._act_keys:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
@@ -487,9 +447,9 @@ class Robocup2dEnv:
         ready_to_act, cycle0, gm, ball = ipc.wait_until_playon_or_done(
             cbuf=cbuf,
             begin_cycle=self.begin_cycle,
-            episode_limit=episode_limit,
-            goal_x=GOAL_X,
-            goal_y=GOAL_Y,
+            episode_limit=self.episode_limit,
+            goal_x=self.goal_x,
+            goal_y=self.goal_y,
             log=self.log,
             tag="step wait until playon or done",
         )
@@ -514,14 +474,14 @@ class Robocup2dEnv:
                 raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
             # P.trainer.write_fixed_reset(tbuf)
             P.trainer.write_opcode(tbuf, 8)
-            # 3) 翻 flags -> REQ(1,0) 提交请求
+            # 3) Flip flags -> REQ(1,0) Submit request
             ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
         
         self.pass_trainer = False
 
-        # 2) 写动作（只在 PlayOn 同步点写）
-        if ready_to_act and n_agents > 0:
-            for idx, k in enumerate(keys):
+        # 2) Write actions (only write at PlayOn sync point)
+        if ready_to_act and self.n_agents > 0:
+            for idx, k in enumerate(self._act_keys):
                 shm_name = self.player_names[k]
                 shm = self.player_shms[shm_name]
                 buf = shm.buf
@@ -537,15 +497,15 @@ class Robocup2dEnv:
             ready_to_act, cycle, gm, ball = ipc.wait_until_playon_or_done(
                 cbuf=cbuf,
                 begin_cycle=self.begin_cycle,
-                episode_limit=episode_limit,
-                goal_x=GOAL_X,
-                goal_y=GOAL_Y,
+                episode_limit=self.episode_limit,
+                goal_x=self.goal_x,
+                goal_y=self.goal_y,
                 log=self.log,
                 tag="step wait until playon or done",
                 current_coach_cycle=cycle0
             )
             # print("ready_to_act after action submit:", ready_to_act)
-            # 0) 看门狗：检查子进程是否都活着
+            # 0) Watchdog: Check if child processes are alive
             alive, dead, dead_info = proc.check_child_processes(self.procs, where="step1")
             self.procs = alive
             if dead:
@@ -553,7 +513,7 @@ class Robocup2dEnv:
         
             # print("after watchdog check")
             if ready_to_act:
-                # 3) 写完动作后：等下一帧全体 READY
+                # 3) After writing actions: Wait for next frame all READY
                 ipc.wait_all_ready_or_raise(
                     bufs,
                     off_a=P.player.OFFSET_FLAG_A,
@@ -564,20 +524,20 @@ class Robocup2dEnv:
                     tag="step post-ready barrier",
                 )
 
-        # 4) 结算（读 coach）
+        # 4) Settlement (read coach)
         cycle = int(P.coach.read_cycle(cbuf))
         gm = int(P.coach.read_gamemode(cbuf))
         ball = P.coach.read_ball(cbuf, copy=True)
 
-        timeout = (self.begin_cycle >= 0) and ((cycle - self.begin_cycle) >= episode_limit)
-        scored = (abs(float(ball[0])) >= GOAL_X) and (abs(float(ball[1])) <= GOAL_Y)
+        timeout = (self.begin_cycle >= 0) and ((cycle - self.begin_cycle) >= self.episode_limit)
+        scored = (abs(float(ball[0])) >= self.goal_x) and (abs(float(ball[1])) <= self.goal_y)
 
         reward = 0.0
         self.done = 0
 
         if scored:
             self.done = 1
-            reward = 1.0 if float(ball[0]) >= GOAL_X else -1.0
+            reward = 1.0 if float(ball[0]) >= self.goal_x else -1.0
         elif gm == 1 or timeout:
             self.done = 1
             reward = 0.0
@@ -591,38 +551,32 @@ class Robocup2dEnv:
 
     def get_obs(self):
         """
-        返回 obs: np.ndarray shape = (n_agents, 97)
+        Returns obs: np.ndarray shape = (n_agents, 97)
 
-        逻辑：
-        0) 看门狗：子进程挂了就抛错（避免卡在 wait）
-        1) barrier：对所有球员逐个 wait_ready_or_raise（确保都 READY）
-        2) 一口气读取所有 obs（第二轮读，减少混帧概率）
+        Logic:
+        0) Watchdog: Raise error if child process dies (avoid getting stuck in wait)
+        1) Barrier: wait_ready_or_raise for all players one by one (ensure all READY)
+        2) Read all obs at once (second round read, reduce frame mixing probability)
         """
-        # done 缓存
+        # done cache
         if self.done == 1 and self.last_obs is not None:
             return self.last_obs
 
-        # 0) 看门狗：检查子进程是否都活着
+        # 0) Watchdog: Check if child processes are alive
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_obs")
         self.procs = alive
         if dead:
             raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-        # keys 稳定顺序（并缓存，避免每步排序开销/顺序抖动）
-        keys = getattr(self, "_obs_keys", None)
-        if keys is None:
-            keys = sorted(self.player_names.keys())  # (team_idx, unum)
-            self._obs_keys = keys
-
-        # 1) barrier：先确保“所有球员”READYdd
-        # 一次性收集所有需要 barrier 的 shm buf
+        # 1) Barrier: Ensure "all players" are READY first
+        # Collect all shm bufs needed for barrier at once
         bufs = []
-        for k in keys:
+        for k in self._obs_keys:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
 
-        # 全体轮询直到全部 READY（或总超时抛错）
+        # Poll all until all READY (or raise error on total timeout)
         ipc.wait_all_ready_or_raise(
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
@@ -633,9 +587,9 @@ class Robocup2dEnv:
             tag="get_obs barrier",
         )
 
-        # 2) 一口气读取 obs（第二轮读）
+        # 2) Read obs at once (second round read)
         obs_list = []
-        for k in keys:
+        for k in self._obs_keys:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             o = P.player.read_obs_norm(buf=shm.buf,field_length=self.half_length, field_width=self.half_width)  # float32[97]
@@ -647,22 +601,22 @@ class Robocup2dEnv:
 
     def get_state(self):
         """
-        从 coach shm 读全局 state：
+        Read global state from coach shm:
         state = ball(4) + players(22*6) => (136,)
-        不做 stable-read（不检查 cycle），直接读一次返回。
+        No stable-read (no cycle check), read once and return directly.
         """
 
-        # 0) 看门狗：检查子进程是否都活着
+        # 0) Watchdog: Check if child processes are alive
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_state")
         self.procs = alive
         if dead:
             raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-        # 1) done 缓存
+        # 1) done cache
         if self.done == 1 and self.last_state is not None:
             return self.last_state
 
-        # 2) 读 coach shm
+        # 2) Read coach shm
         shm = self.coach_shms[self.coach_name]
         buf = shm.buf
 
@@ -676,51 +630,51 @@ class Robocup2dEnv:
         return state
 
     def close(self) -> None:
-        if getattr(self, "_closed", False):
+        if self._closed:
             return
         self._closed = True
         self._teardown_run()
 
     def __del__(self):
-        # 析构阶段不要抛异常
+        # Do not raise exceptions during destruction
         try:
             self.close()
         except Exception:
             pass
 
     def register_shm(self, name: str) -> None:
-        """在你 create_shm() 成功后立刻调用，确保 close() 能清理到。"""
+        """Call immediately after create_shm() succeeds to ensure close() can clean up."""
         if not name.startswith("/"):
             name = "/" + name
         self._shm_names.append(name)
 
     def get_env_info(self):
         """
-        返回给 PyMARL 的 env_info。
-        动作模式完全由 team1 名字决定：
-          - team1 以 "base" 开头 -> 使用 base 动作 (17 个)
-          - team1 以 "hybrid" 开头 -> 使用 hybrid 动作 (比如 4 个，你自己定)
+        Return env_info for PyMARL.
+        Action mode is determined entirely by team1 name:
+          - team1 starts with "base" -> use base actions (17)
+          - team1 starts with "hybrid" -> use hybrid actions (e.g., 4, define yourself)
         """
         team_name = self.team1
 
-        # 1) 根据 team1 决定动作数
+        # 1) Determine action count based on team1
         if team_name.startswith("base"):
             n_actions = P.player.BASE_MASK_NUM        # 17
         elif team_name.startswith("hybrid"):
-            n_actions = 4                             # 你目前的 hybrid 动作数，改成你真实的
+            n_actions = 4                             # Your current hybrid action count, change to real one
         else:
-            raise ValueError(f"未知的 team1='{self.team1}'，无法推断动作模式")
+            raise ValueError(f"Unknown team1='{self.team1}', cannot infer action mode")
 
-        # 2) 组装 env_info
+        # 2) Assemble env_info
         return {
-            "n_agents": int(self.n1),                 # 只控制 team1 的球员数量
+            "n_agents": int(self.n1),                 # Only control the number of players in team1
             "n_actions": int(n_actions),
             "state_shape": int(P.coach.COACH_STATE_FLOAT),  # 136
             "obs_shape": int(P.player.STATE_NUM),           # 97
             "episode_limit": int(self.episode_limit),
         }
     def _teardown_procs_only(self) -> None:
-        # 0) 重新采样 pgid/pid
+        # 0) Resample pgid/pid
         try:
             self._collect_run_pgids()
         except Exception:
@@ -756,20 +710,15 @@ class Robocup2dEnv:
         except Exception:
             pass
 
-        # 5) 只清“运行期缓存”，不清 shm/端口/run_id
+        # 5) Only clear "runtime cache", do not clear shm/ports/run_id
         self.procs = []
         self.begin_cycle = -1
         self.last_state = None
         self.last_obs = None
         self.last_avail_actions = None
         self.done = 0
-
-        if hasattr(self, "_obs_keys"):
-            delattr(self, "_obs_keys")
-        if hasattr(self, "_act_keys"):
-            delattr(self, "_act_keys")
         
-        # _teardown_procs_only() 最末尾
+        # At the end of _teardown_procs_only()
         ports = [self.server_port, self.coach_port, self.trainer_port, self.debug_port]
         ports = [p for p in ports if p is not None]
         if ports:
@@ -778,7 +727,7 @@ class Robocup2dEnv:
                 self.log.warning(f"[teardown] ports still busy after wait: {ports}")
 
     def _teardown_run(self) -> None:
-        # 0) 重新采样一次（防止 _run_pgids/_run_pids 为空或过期）
+        # 0) Resample once (prevent _run_pgids/_run_pids from being empty or expired)
         try:
             self._collect_run_pgids()
         except Exception:
@@ -828,18 +777,28 @@ class Robocup2dEnv:
         # 5) shm close/unlink
         def _destroy_owner_dict(d):
             for name, shm in list(d.items()):
-                try: shm.close()
-                except Exception: pass
-                try: shm.unlink()
-                except Exception: pass
+                try: 
+                    shm.close()
+                except Exception: 
+                    pass
+                try: 
+                    shm.unlink()
+                except Exception: 
+                    pass
             d.clear()
 
-        try: _destroy_owner_dict(getattr(self, "coach_shms", {}))
-        except Exception: pass
-        try: _destroy_owner_dict(getattr(self, "trainer_shms", {}))
-        except Exception: pass
-        try: _destroy_owner_dict(getattr(self, "player_shms", {}))
-        except Exception: pass
+        try: 
+            _destroy_owner_dict(getattr(self, "coach_shms", {}))
+        except Exception: 
+            pass
+        try: 
+            _destroy_owner_dict(getattr(self, "trainer_shms", {}))
+        except Exception: 
+            pass
+        try: 
+            _destroy_owner_dict(getattr(self, "player_shms", {}))
+        except Exception: 
+            pass
 
         for name in list(getattr(self, "_shm_names", [])):
             try:
@@ -882,13 +841,11 @@ class Robocup2dEnv:
         self._run_pgids = set()
         self._run_pids = set()
 
-        if hasattr(self, "_obs_keys"):
-            delattr(self, "_obs_keys")
-        if hasattr(self, "_act_keys"):
-            delattr(self, "_act_keys")
         if self._port_lock_fd is not None:
-            try: os.close(self._port_lock_fd)
-            except Exception: pass
+            try: 
+                os.close(self._port_lock_fd)
+            except Exception: 
+                pass
             self._port_lock_fd = None
             self._port_lock_path = None
 
@@ -903,15 +860,13 @@ class Robocup2dEnv:
             p = _as_popen(item)
             if p is None:
                 continue
-            try:
-                if p.poll() is None:
-                    pid = int(p.pid)
-                    self._run_pids.add(pid)
-                    pgid = os.getpgid(pid)
-                    if pgid != py_pgid:
-                        self._run_pgids.add(pgid)
-            except Exception:
-                pass
+            if p.poll() is None:
+                pid = int(p.pid)
+                self._run_pids.add(pid)
+                pgid = os.getpgid(pid)
+                if pgid != py_pgid:
+                    self._run_pgids.add(pgid)
+
 
         self.log.info(f"[run] python_pgid={py_pgid} run_pgids={sorted(self._run_pgids)} run_pids={sorted(self._run_pids)[:8]}{'...' if len(self._run_pids)>8 else ''}")
 
@@ -925,7 +880,7 @@ class Robocup2dEnv:
                 # self.log.warning(f"[teardown] skip killpg(pgid={pgid}) because it equals python pgid")
                 continue
 
-            # ✅ 关键：确认这个 pgid 里还存在“本 run 的存活 pid”
+            # ✅ Critical: Confirm that "alive pids of this run" still exist in this pgid
             alive_member = False
             for pid in list(pids):
                 try:
@@ -938,7 +893,7 @@ class Robocup2dEnv:
                     continue
 
             if not alive_member:
-                # pgid 可能已空/被复用；不杀
+                # pgid may be empty/reused; do not kill
                 # self.log.info(f"[teardown] skip killpg pgid={pgid} sig={sig} (no alive member pid in this run)")
                 continue
 
@@ -949,4 +904,3 @@ class Robocup2dEnv:
                 pass
             except Exception as e:
                 self.log.warning(f"[teardown] killpg failed pgid={pgid} sig={sig} err={e}")
-

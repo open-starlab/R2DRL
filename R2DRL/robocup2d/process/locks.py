@@ -64,29 +64,3 @@ def release_run_lock(run_id: str, fd: int, *, unlink_file: bool = True, log=None
 
     if log:
         log.info(f"[lock] released run_id={run_id} unlink_file={unlink_file} path={path}")
-
-
-def extract_run_id_from_devshm_filename(fn: str) -> Optional[str]:
-    m = RUN_RE.match(fn)
-    return m.group(1) if m else None
-
-def is_run_active(run_id: str) -> bool:
-    path = f"/tmp/robocup2drl_{run_id}.lock"
-    if not os.path.exists(path):
-        return False
-    try:
-        fd = os.open(path, os.O_RDWR)
-    except OSError:
-        return True  # 保守：打不开锁文件就别删
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            return False  # 能抢到锁 => 没活实例持有
-        except BlockingIOError:
-            return True   # 抢不到 => 有活实例持有
-    finally:
-        try:
-            os.close(fd)
-        except Exception:
-            pass

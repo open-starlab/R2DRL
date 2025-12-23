@@ -176,24 +176,32 @@ def read_obs_norm(
     sm = float(stamina_max) if stamina_max else 1.0
 
     # --- self ---
-    o[0] /= L;  o[1] /= W
-    o[2] /= pv; o[3] /= pv
+    o[0] /= L
+    o[1] /= W
+    o[2] /= pv
+    o[3] /= pv
     o[4] /= sm
     # o[5] kickable keep
 
     # --- ball ---
-    o[6] /= L;  o[7] /= W
-    o[8] /= bv; o[9] /= bv
+    o[6] /= L
+    o[7] /= W
+    o[8] /= bv
+    o[9] /= bv
 
     # --- opponents 11x4: [x,y,vx,vy] ---
     opp = o[10:54].reshape(11, 4)
-    opp[:, 0] /= L; opp[:, 1] /= W
-    opp[:, 2] /= pv; opp[:, 3] /= pv
+    opp[:, 0] /= L
+    opp[:, 1] /= W
+    opp[:, 2] /= pv
+    opp[:, 3] /= pv
 
     # --- mates 10x4: [x,y,vx,vy] ---
     mate = o[54:94].reshape(10, 4)
-    mate[:, 0] /= L; mate[:, 1] /= W
-    mate[:, 2] /= pv; mate[:, 3] /= pv
+    mate[:, 0] /= L
+    mate[:, 1] /= W
+    mate[:, 2] /= pv
+    mate[:, 3] /= pv
 
     if clip:
         # 位置/速度/体力做个裁剪，避免偶发异常值把网络炸掉

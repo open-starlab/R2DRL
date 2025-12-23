@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import Any, List, Tuple
 
+
 def check_child_processes(processes, where: str = "") -> Tuple[List[Any], List[Tuple[Any, Any]], str]:
     """
     Returns:
-      alive: 存活的 info 列表（保持原对象）
-      dead : [(info, rc), ...]
-      dead_info_str: 已整理好的打印信息（多行字符串）
+        alive: list of alive info objects (original objects preserved)
+        dead : [(info, rc), ...] (dead process info and return code)
+        dead_info_str: formatted multi-line string for logging dead processes
     """
     dead: List[Tuple[Any, Any]] = []
     alive: List[Any] = []
@@ -37,7 +38,7 @@ def check_child_processes(processes, where: str = "") -> Tuple[List[Any], List[T
             lines.append(
                 f"[{where}][{kind}] pid={pid} rc={rc} team={team} unum={unum} shm={shm} log={log}"
             )
-        else:  # 原始 Popen（server/trainer/coach）
+        else:  # Raw Popen (server/trainer/coach)
             lines.append(
                 f"[{where}][server/trainer/coach] pid={pid} rc={rc}"
             )

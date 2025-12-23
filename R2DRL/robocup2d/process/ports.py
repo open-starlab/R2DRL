@@ -23,7 +23,7 @@ def can_bind_all(port: int, check_ipv6: bool = True) -> bool:
             try:
                 s = socket.socket(af, typ)
 
-                # 关键：IPv6 探测时尽量避免 v4-mapped 干扰
+                # Key: When probing IPv6, try to avoid v4-mapped interference
                 if af == socket.AF_INET6:
                     try:
                         s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
@@ -33,14 +33,14 @@ def can_bind_all(port: int, check_ipv6: bool = True) -> bool:
                 s.bind(_bind_addr(host, port, af))
 
             except TypeError:
-                # IPv6 地址族不可用等情况
+                # IPv6 address family not available, etc.
                 if af == socket.AF_INET6:
                     continue
                 return False
 
             except OSError as e:
                 if af == socket.AF_INET6:
-                    # 只忽略“IPv6 不支持/不可用”，不要忽略“被占用”
+                    # Only ignore "IPv6 not supported/unavailable", do not ignore "address in use"
                     if e.errno in (errno.EAFNOSUPPORT, errno.EPROTONOSUPPORT, errno.EADDRNOTAVAIL):
                         continue
                     return False
@@ -48,13 +48,15 @@ def can_bind_all(port: int, check_ipv6: bool = True) -> bool:
 
             finally:
                 if s is not None:
-                    try: s.close()
-                    except Exception: pass
+                    try: 
+                        s.close()
+                    except Exception: 
+                        pass
 
     return True
 
 def wait_ports_free(ports: Iterable[int], timeout: float = 8.0, poll: float = 0.1, hold: float = 0.3) -> bool:
-    #给一组端口 ports，在 timeout 时间内反复检查它们是否全部空闲。
+    # For a set of ports, repeatedly check if all are free within the timeout period.
 
     deadline = time.time() + timeout
     ports = [int(p) for p in ports]
@@ -82,7 +84,7 @@ def pick_ports(auto_start, auto_end, auto_step,
     for base in range(auto_start, auto_end, auto_step):
         fd, path = try_lock_port_block(base)
         if fd is None:
-            continue  # 这段已被别的任务占用（同机互斥）
+            continue  # This block is already occupied by another task (host-level mutual exclusion)
 
         block = range(base, base + auto_step)
         if wait_ports_free(block, timeout=timeout, poll=poll, hold=hold):
@@ -92,7 +94,7 @@ def pick_ports(auto_start, auto_end, auto_step,
             debug   = base + debug_offset
             return base, server, trainer, coach, debug, fd, path
 
-        # 端口不空，释放锁继续试下一段
+        # Ports are not free, release the lock and try the next block
         try:
             os.close(fd)
         except Exception:

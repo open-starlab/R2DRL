@@ -1,11 +1,12 @@
 from __future__ import annotations
-import os, psutil
-from typing import Iterable, Optional, Set
+import os
+import psutil
+from typing import Optional, Set
 
 def _get_env_value(pid: int, key: str) -> Optional[str]:
     """
-    Read /proc/<pid>/environ for linux, return env value of key if present.
-    psutil does没有稳定跨平台读 env 的 API，这里直接读 /proc 更稳。
+    Read /proc/<pid>/environ for Linux, return the value of the given environment variable key if present.
+    psutil does not provide a stable cross-platform API for reading env, so reading /proc is more reliable here.
     """
     try:
         with open(f"/proc/{int(pid)}/environ", "rb") as f:
@@ -42,7 +43,7 @@ def kill_port_by_run_id(
 
     victims: Set[int] = set()
 
-    # 1) 找到占用该端口的 pid（TCP/UDP 都可能出现）
+    # 1) Find pids occupying the port (could be TCP/UDP)
     try:
         for c in psutil.net_connections(kind="inet"):
             if not c.pid:
@@ -54,12 +55,12 @@ def kill_port_by_run_id(
 
     killed: Set[int] = set()
 
-    # 2) 过滤并杀
+    # 2) Filter and kill
     for pid in sorted(victims):
         if pid == my_pid:
             continue
 
-        # 只操作同一用户（额外安全网）
+        # Only operate on processes of the same user (extra safety)
         try:
             p = psutil.Process(pid)
             if p.uids().real != my_uid:
@@ -67,7 +68,7 @@ def kill_port_by_run_id(
         except Exception:
             continue
 
-        # 关键：只杀带同 run_id 的
+        # Key: Only kill processes with the same run_id
         v = _get_env_value(pid, env_key)
         if v != str(run_id):
             if log:
@@ -77,7 +78,7 @@ def kill_port_by_run_id(
                     pass
             continue
 
-        # 杀进程（优雅→强制）
+        # Kill process (graceful → forceful)
         try:
             name = ""
             try:
@@ -99,47 +100,3 @@ def kill_port_by_run_id(
             pass
 
     return killed
-
-def auto_kill_port(port: int, *, allow_names=None, log=None):
-    allow_names = set(n.lower() for n in (allow_names or []))
-    my_pid = os.getpid()
-    my_uid = os.getuid()
-
-    victims = set()
-    try:
-        for c in psutil.net_connections(kind="inet"):
-            if c.laddr and getattr(c.laddr, "port", None) == port and c.pid:
-                victims.add(c.pid)
-    except Exception:
-        pass
-
-    for pid in victims:
-        if pid == my_pid:
-            continue
-        try:
-            p = psutil.Process(pid)
-
-            # 过滤：只杀自己用户
-            try:
-                if p.uids().real != my_uid:
-                    continue
-            except Exception:
-                continue
-
-            # 过滤：只杀指定进程名（你可以传 allow_names=None 来跳过这个过滤）
-            if allow_names:
-                try:
-                    name = (p.name() or "").lower()
-                    if name not in allow_names:
-                        continue
-                except Exception:
-                    continue
-
-            if log: log.info(f"[kill_port] port={port} kill pid={pid} name={p.name()}")
-            try:
-                p.terminate()
-                p.wait(timeout=1.0)
-            except Exception:
-                p.kill()
-        except Exception:
-            pass

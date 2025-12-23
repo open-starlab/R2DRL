@@ -53,7 +53,7 @@ def wait_flags(
 
     if log:
         a, b = read_flags(buf, off_a, off_b)
-        head16 = list(bytes(buf[:16]))   # 注意：这里只在打印时 bytes()，不要把它当 buf 用
+        head16 = list(bytes(buf[:16]))   # Note: Only convert to bytes() for printing, do not use it as the buffer itself.
         log.info(
             f"[handshake]{tag} wait_flags timeout want={want} got=({a},{b}) "
             f"off_a={off_a} off_b={off_b} head16={head16} buf_type={type(buf)}"
@@ -84,7 +84,7 @@ def wait_all_ready_or_raise(
     tag: str = "",
 ) -> None:
     """
-    Barrier：轮询所有 buf 的 flags，直到全部 READY；否则超时直接抛 ShmProtocolError。
+    Barrier: Poll flags of all bufs until all are READY; otherwise raise ShmProtocolError on timeout.
     bufs: [(buf, name), ...]
     """
     pending = list(bufs)
@@ -113,7 +113,7 @@ def wait_all_ready_or_raise(
             for buf, name in pending:
                 a, b = read_flags(buf, off_a, off_b)
                 details.append(f"{name}=({a},{b})")
-            msg = f"wait ALL READY timeout: pending=" + ", ".join(details) + f" tag={tag}"
+            msg = "wait ALL READY timeout: pending=" + ", ".join(details) + f" tag={tag}"
             if log:
                 log.info(f"[handshake]{tag} {msg}")
             raise ShmProtocolError(msg)
@@ -128,19 +128,19 @@ def wait_until_playon_or_done(
     episode_limit: int,
     goal_x: float,
     goal_y: float,
-    max_stall_sec: float = 5.0,   # cycle 不前进超过这个秒数就判定卡死
+    max_stall_sec: float = 20.0,   # If cycle does not advance for this many seconds, consider it stalled.
     poll: float = 0.05,
     log=None,
     tag: str = "",
     current_coach_cycle=None,
 ):
     """
-    等待直到：
+    Wait until:
       - gm==2 (PlayOn) => ready_to_act=True
-      - 或 gm==1/timeover 或 timeout 或 goal => ready_to_act=False
+      - OR gm==1/timeover OR timeout OR goal => ready_to_act=False
 
-    额外：检测 cycle 是否前进；长时间不前进认为卡死/服务器断了。
-    返回: (ready_to_act, cycle, gm, ball)
+    Additionally: Detect if cycle advances; if not advancing for a long time, consider it stalled/server disconnected.
+    Returns: (ready_to_act, cycle, gm, ball)
     """
 
     last_cycle = None
@@ -162,10 +162,11 @@ def wait_until_playon_or_done(
             else:
                 if (time.monotonic() - last_change_t) > float(max_stall_sec):
                     msg = f"[stall]{tag} coach cycle not advancing: cycle={cycle} gm={gm}"
-                    if log: log.info(msg)
+                    if log: 
+                        log.info(msg)
                     raise RuntimeError(msg)
 
-        # ✅ 动作后：必须等到下一帧（cycle > current_coach_cycle）才允许返回
+        # ✅ After action: Must wait for the next frame (cycle > current_coach_cycle) before returning.
         if current_coach_cycle is not None and cycle <= int(current_coach_cycle):
             time.sleep(float(poll))
             continue
