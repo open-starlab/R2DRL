@@ -45,6 +45,7 @@ class Robocup2dEnv:
         self.playon_timeout = float(self.args["playon_timeout"])
         self.trainer_ready_timeout_ms = int(self.args["trainer_ready_timeout_ms"])
         self.ports_wait_timeout = float(self.args["ports_wait_timeout"])
+        self.server_wait_seconds = float(self.args["server_wait_seconds"])
 
         self._lock_fd = None
         self.log_dir = None
@@ -360,6 +361,7 @@ class Robocup2dEnv:
             logs_dir=self.log_dir,
             env=env,
             log_tag=f"{self.run_id}_",
+            server_wait_seconds=self.server_wait_seconds,
         )
         self.procs.extend(player_procs)
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
@@ -376,6 +378,7 @@ class Robocup2dEnv:
             logs_dir=self.log_dir,
             env=env,
             log_tag=f"{self.run_id}_",
+            server_wait_seconds=self.server_wait_seconds,
         )
         self.procs.append(p)
         self.log.info(f"[{where}][coach] pid={p.pid} port={int(self.coach_port)} shm={self.coach_name}")
@@ -393,6 +396,7 @@ class Robocup2dEnv:
             trainer_shm_name=str(self.trainer_name),
             env=env,
             log_tag=f"{self.run_id}_",
+            server_wait_seconds=self.server_wait_seconds,
         )
         self.procs.append(p)
         # self.log.info(f"[{where}][trainer] pid={p.pid} port={int(self.trainer_port)} shm={self.trainer_name}")
@@ -456,6 +460,7 @@ class Robocup2dEnv:
             episode_limit=self.episode_limit,
             goal_x=self.goal_x,
             goal_y=self.goal_y,
+            max_stall_sec=self.playon_timeout,
             log=self.log,
             tag="step wait until playon or done",
         )
@@ -506,6 +511,7 @@ class Robocup2dEnv:
                 episode_limit=self.episode_limit,
                 goal_x=self.goal_x,
                 goal_y=self.goal_y,
+                max_stall_sec=self.playon_timeout,
                 log=self.log,
                 tag="step wait until playon or done",
                 current_coach_cycle=cycle0

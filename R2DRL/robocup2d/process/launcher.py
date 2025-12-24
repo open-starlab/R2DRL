@@ -127,6 +127,7 @@ def launch_trainer(
     log_tag: str = "",
     # you can pass extra flags for sample_trainer here if needed
     extra_args: Optional[List[str]] = None,
+    server_wait_seconds: float = 30.0,
 ) -> Tuple[subprocess.Popen, LogFP]:
     """
     Launch sample_trainer. Pass shm name via env var RCSC_TRAINER_SHM.
@@ -138,7 +139,7 @@ def launch_trainer(
         trainer_exe,
         "-h", str(host),
         "-p", str(int(trainer_port)),
-        "--server_wait_seconds", "30",
+        "--server_wait_seconds", str(int(server_wait_seconds)),
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))
@@ -158,6 +159,7 @@ def launch_coach(
     env: Optional[dict] = None,
     log_tag: str = "",
     extra_args: Optional[List[str]] = None,
+    server_wait_seconds: float = 30.0,
 ) -> Tuple[subprocess.Popen, LogFP]:
     """
     Launch sample_coach with explicit --shm-name.
@@ -168,7 +170,7 @@ def launch_coach(
         "-p", str(int(coach_port)),
         "-t", str(coach_team),
         "--shm-name", str(coach_shm_name),
-        "--server_wait_seconds", "30"
+        "--server_wait_seconds", str(int(server_wait_seconds))
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))
@@ -197,6 +199,7 @@ def launch_players(
     env: Optional[dict] = None,
     log_tag: str = "",
     extra_args_common: Optional[List[str]] = None,
+    server_wait_seconds: float = 30.0,
 ) -> Tuple[List[ProcInfo], List[LogFP]]:
     """
     Launch all players of both teams.
@@ -218,7 +221,7 @@ def launch_players(
             "--debug_server_host", str(debug_host),
             "--debug_server_port", str(int(debug_port)),
             "--mode", str(mode),
-            "--server_wait_seconds", "30"
+            "--server_wait_seconds", str(int(server_wait_seconds)),
         ]
 
         shm_name = player_shm_by_key.get((team_idx, int(unum)))

@@ -45,8 +45,10 @@ env_args:
   playon_timeout: 36000.0
   trainer_ready_timeout_ms: 36000000.0
   ports_wait_timeout: 36000.0
+  server_wait_seconds: 360000.0
 
   # wait_ready_timeout: 20.0
   # playon_timeout: 20.0
   # trainer_ready_timeout_ms: 10000
   # ports_wait_timeout: 10.0
+  server_wait_seconds: 30.0
