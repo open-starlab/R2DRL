@@ -41,6 +41,11 @@ class Robocup2dEnv:
         self.half_length = float(self.args["HALF_LENGTH"])
         self.half_width = float(self.args["HALF_WIDTH"])
 
+        self.wait_ready_timeout = float(self.args["wait_ready_timeout"])
+        self.playon_timeout = float(self.args["playon_timeout"])
+        self.trainer_ready_timeout_ms = int(self.args["trainer_ready_timeout_ms"])
+        self.ports_wait_timeout = float(self.args["ports_wait_timeout"])
+
         self._lock_fd = None
         self.log_dir = None
         self.rcg_dir = None
@@ -102,7 +107,7 @@ class Robocup2dEnv:
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=20,
+            timeout=self.wait_ready_timeout,
             poll=0.0005,
             log=self.log,
             tag="get_avail_actions barrier",
@@ -192,7 +197,7 @@ class Robocup2dEnv:
         tbuf = self.trainer_shms[self.trainer_name].buf
 
         # 3) Wait for gm==PlayOn(2)
-        t_end = time.monotonic() + 20.0
+        t_end = time.monotonic() + float(self.playon_timeout)
         while time.monotonic() < t_end:
             alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect1")
             self.procs = alive
@@ -208,6 +213,7 @@ class Robocup2dEnv:
 
             if gm == 2:
                 self.begin_cycle = cycle
+                break
 
             time.sleep(0.05)
 
@@ -224,14 +230,14 @@ class Robocup2dEnv:
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=20.0,
+            timeout=self.wait_ready_timeout,
             poll=0.0005,
             log=self.log,
             tag="reset first-frame barrier",
         )
 
         tflags=P.trainer.read_flags(tbuf)
-        if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=10000, poll_us=500):
+        if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
             raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
         P.trainer.write_fixed_reset(tbuf)
         P.trainer.write_opcode(tbuf, 10)
@@ -460,7 +466,7 @@ class Robocup2dEnv:
                 bufs,
                 off_a=P.player.OFFSET_FLAG_A,
                 off_b=P.player.OFFSET_FLAG_B,
-                timeout=20.0,
+                timeout=self.wait_ready_timeout,
                 poll=0.0005,
                 log=self.log,
                 tag="step pre-ready barrier",
@@ -470,7 +476,7 @@ class Robocup2dEnv:
             tbuf = trainer_shm.buf
             tflags=P.trainer.read_flags(tbuf)
 
-            if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=10000, poll_us=500):
+            if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
                 raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
             # P.trainer.write_fixed_reset(tbuf)
             P.trainer.write_opcode(tbuf, 8)
@@ -518,7 +524,7 @@ class Robocup2dEnv:
                     bufs,
                     off_a=P.player.OFFSET_FLAG_A,
                     off_b=P.player.OFFSET_FLAG_B,
-                    timeout=20,
+                    timeout=self.wait_ready_timeout,
                     poll=0.0005,
                     log=self.log,
                     tag="step post-ready barrier",
@@ -581,7 +587,7 @@ class Robocup2dEnv:
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=20,
+            timeout=self.wait_ready_timeout,
             poll=0.0005,
             log=self.log,
             tag="get_obs barrier",
@@ -722,7 +728,7 @@ class Robocup2dEnv:
         ports = [self.server_port, self.coach_port, self.trainer_port, self.debug_port]
         ports = [p for p in ports if p is not None]
         if ports:
-            ok = proc.wait_ports_free(ports, timeout=10.0, poll=0.05, hold=0.3)
+            ok = proc.wait_ports_free(ports, timeout=self.ports_wait_timeout, poll=0.05, hold=0.3)
             if not ok:
                 self.log.warning(f"[teardown] ports still busy after wait: {ports}")
 

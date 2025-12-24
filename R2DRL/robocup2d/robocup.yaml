@@ -40,3 +40,13 @@ env_args:
   goal_y: 7.01
   HALF_LENGTH: 52.5
   HALF_WIDTH: 34.0
+
+  wait_ready_timeout: 36000.0
+  playon_timeout: 36000.0
+  trainer_ready_timeout_ms: 36000000.0
+  ports_wait_timeout: 36000.0
+
+  # wait_ready_timeout: 20.0
+  # playon_timeout: 20.0
+  # trainer_ready_timeout_ms: 10000
+  # ports_wait_timeout: 10.0
