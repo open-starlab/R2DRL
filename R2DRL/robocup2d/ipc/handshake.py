@@ -149,7 +149,7 @@ def wait_until_playon_or_done(
     while True:
         cycle = int(P.coach.read_cycle(cbuf))
         gm = int(P.coach.read_gamemode(cbuf))
-        ball = P.coach.read_ball(cbuf, copy=True)
+        goal = int(P.coach.read_goal_flag(cbuf))
 
         # ---- cycle stall detection ----
         if last_cycle is None:
@@ -172,13 +172,13 @@ def wait_until_playon_or_done(
             continue
 
         timeout = (begin_cycle >= 0) and ((cycle - begin_cycle) >= int(episode_limit))
-        scored = (abs(float(ball[0])) >= float(goal_x)) and (abs(float(ball[1])) <= float(goal_y))
-
-        if gm == 1 or timeout or scored:
-            return False, cycle, gm, ball
+        
+        
+        if gm == 1 or timeout or (goal != 0):
+            return False, cycle, gm
 
         if gm == 2:
-            return True, cycle, gm, ball
+            return True, cycle, gm
         
         time.sleep(float(poll))
 

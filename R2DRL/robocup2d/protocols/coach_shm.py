@@ -8,13 +8,15 @@ import numpy as np
 Buf = Union[memoryview, bytearray, bytes]
 
 COACH_STATE_FLOAT: Final[int] = 136
-COACH_SHM_SIZE: Final[int] = 1 + 4 + COACH_STATE_FLOAT * 4 + 4  # 553
+COACH_SHM_SIZE: Final[int] = 1 + 4 + COACH_STATE_FLOAT * 4 + 4 + 4  # 557
 
 # byte offsets (NOTE: intentionally unaligned)
 OFFSET_FLAG: Final[int] = 0
 OFFSET_CYCLE: Final[int] = 1          # int32: bytes 1..4
 OFFSET_STATE: Final[int] = 5          # float32[136]: bytes 5..548
 OFFSET_GAMEMODE: Final[int] = 549     # int32: bytes 549..552
+OFFSET_GOAL: Final[int] = OFFSET_GAMEMODE + 4  # 553..556
+
 
 _U8:  Final[str] = "<B"
 _I32: Final[str] = "<i"
@@ -122,3 +124,10 @@ def read_state_norm(
         p[:, 5] = np.clip(tid, -1.0, 1.0)
 
     return out.astype(np.float32, copy=False)
+
+def read_goal_flag(buf: Buf) -> int:
+    """+1=左队进球; -1=右队进球; 0=无/已清零"""
+    return int(struct.unpack_from(_I32, buf, OFFSET_GOAL)[0])
+
+def clear_goal_flag(buf: Buf) -> None:
+    struct.pack_into(_I32, buf, OFFSET_GOAL, 0)

@@ -811,7 +811,7 @@ int SamplePlayer::getActionFromSharedMemory()
 
     // C++ 端等待 Python 写完动作（flag 清零），并且最多等 5000 毫秒（5 秒）。
     const auto start   = std::chrono::steady_clock::now();
-    const auto TIMEOUT = std::chrono::milliseconds(50000);
+    const auto TIMEOUT = std::chrono::milliseconds(36000000); // 10 小时，基本上不会超时
     int loop_cnt = 0;
     while (!(*flag_A == 1 && *flag_B == 0)) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));

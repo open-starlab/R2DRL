@@ -363,6 +363,7 @@ void SampleCoach::writeSharedMemory()
     constexpr std::size_t OFF_FLOAT = 5;
     constexpr std::size_t NFLOATS   = 136;
     constexpr std::size_t OFF_MODE  = 1 + 4 + NFLOATS * 4;
+    constexpr std::size_t OFF_GOAL  = OFF_MODE + 4;
 
     auto wr_u8 = [&](std::size_t off, std::uint8_t v) {
         std::memcpy(base + off, &v, sizeof(v));
@@ -372,6 +373,11 @@ void SampleCoach::writeSharedMemory()
     };
     auto wr_f32 = [&](std::size_t off, float v) {
         std::memcpy(base + off, &v, sizeof(v));
+    };
+    auto rd_i32 = [&](std::size_t off) -> std::int32_t {
+        std::int32_t v;
+        std::memcpy(&v, base + off, sizeof(v));
+        return v;
     };
 
     // 1) cycle
@@ -442,6 +448,22 @@ void SampleCoach::writeSharedMemory()
     // 3) mode (GameMode type) @ +549
     const std::int32_t gm_type = static_cast<std::int32_t>(world().gameMode().type());
     wr_i32(OFF_MODE, gm_type);
+
+    // ✅ goal_flag（闩锁：只有 slot==0 才写入，直到 Python 清零）
+    // 约定：+1 = 左队进球；-1 = 右队进球；0 = 无事件/已清零
+    const std::int32_t slot = rd_i32(OFF_GOAL);
+    if (slot == 0) {
+        const rcsc::GameMode &gm = world().gameMode();
+        if (gm.type() == rcsc::GameMode::AfterGoal_) {
+            // SideID 的枚举名以你 rcsc/types.h 为准；常见是 LEFT/RIGHT
+            const rcsc::SideID s = gm.side();
+            if (s == rcsc::LEFT) {
+                wr_i32(OFF_GOAL, +1);
+            } else if (s == rcsc::RIGHT) {
+                wr_i32(OFF_GOAL, -1);
+            }
+        }
+    }
 
     // 4) flag = 1 通知 Python
     wr_u8(OFF_FLAG, static_cast<std::uint8_t>(1));

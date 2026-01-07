@@ -4,7 +4,8 @@ env_args:
   n2: 11
   team1: Base
   team2: Helios
-  episode_limit: 150
+  episode_limit: 600
+  half_time: 60000
   seed: 123
 
   host: "localhost"

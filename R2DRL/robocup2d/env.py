@@ -74,6 +74,9 @@ class Robocup2dEnv:
         self._port_lock_fd = None
         self._port_lock_path = None
         self.pass_trainer = False
+        self.episode_steps = 0
+        self.turn_count = 0
+
         # Child process environment variables (configure LD_LIBRARY_PATH)
         self.child_env = os.environ.copy()
         lib_paths = self.args.get("lib_paths", [])
@@ -94,6 +97,7 @@ class Robocup2dEnv:
         self._act_keys = sorted(self.player_names.keys())
         self._obs_keys = sorted(self.player_names.keys())
         self.n_agents = self.n1
+        self.first_time=True
         
     def get_avail_actions(self):
         if self.done == 1 and self.last_avail_actions is not None:
@@ -132,17 +136,24 @@ class Robocup2dEnv:
         return out
 
     def reset(self):
-        if self._closed:
-            raise RuntimeError("env already closed; create a new env instance")
+        # print("reset!!!")
+        self.turn_count += 1
+        print("Turn:", self.turn_count)
+        if self.first_time:
+            if self._closed:
+                raise RuntimeError("env already closed; create a new env instance")
 
-        # Critical: Clean up old processes for each attempt (keep shm/run_id)
-        self._teardown_procs_only()
-        self._clear_shm_all()
+            # Critical: Clean up old processes for each attempt (keep shm/run_id)
+            self._teardown_procs_only()
+            self._clear_shm_all()
 
-        self._start_procs_only(where="reset")
-
-        # Actual reset logic
-        self._reset_once_no_reconnect()
+            self._start_procs_only(where="reset")
+            # Actual reset logic
+            self._reset_once_no_reconnect()
+            self.first_time = False
+        else:
+            self._reset_once_no_reconnect()
+            
 
     def _clear_shm_all(self, *, clear_players=True, clear_coach=True, clear_trainer=True) -> None:
         """
@@ -181,6 +192,7 @@ class Robocup2dEnv:
 
     def _reset_once_no_reconnect(self):
         # 0) watchdog
+        # print("# 0) watchdog")
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect0")
         self.procs = alive
         if dead:
@@ -192,12 +204,15 @@ class Robocup2dEnv:
         self.last_avail_actions = None
         self.done = 0
         self.begin_cycle = -1
+        self.episode_steps = 0
+
 
         # 2) coach/trainer buf (trainer not used yet, can be kept)
         cbuf = self.coach_shms[self.coach_name].buf
         tbuf = self.trainer_shms[self.trainer_name].buf
 
         # 3) Wait for gm==PlayOn(2)
+        # print("# 3) Wait for gm==PlayOn(2)")
         t_end = time.monotonic() + float(self.playon_timeout)
         while time.monotonic() < t_end:
             alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect1")
@@ -214,6 +229,7 @@ class Robocup2dEnv:
 
             if gm == 2:
                 self.begin_cycle = cycle
+                P.coach.clear_goal_flag(cbuf)
                 break
 
             time.sleep(0.05)
@@ -226,7 +242,7 @@ class Robocup2dEnv:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
-
+        # print("wait_all_ready_or_raise")
         ipc.wait_all_ready_or_raise(
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
@@ -336,6 +352,7 @@ class Robocup2dEnv:
             coach_port=int(self.coach_port),
             logs_dir=self.log_dir,
             rcg_dir=self.rcg_dir,
+            half_time=int(self.args["half_time"]),
             env=env,
             log_tag=f"{self.run_id}_",
         )
@@ -414,7 +431,7 @@ class Robocup2dEnv:
         """
         # print("Step!!!")
         # 0) Watchdog
-
+        self.episode_steps += 1
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="step0")
         self.procs = alive
         if dead:
@@ -454,7 +471,7 @@ class Robocup2dEnv:
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
 
-        ready_to_act, cycle0, gm, ball = ipc.wait_until_playon_or_done(
+        ready_to_act, cycle0, gm = ipc.wait_until_playon_or_done(
             cbuf=cbuf,
             begin_cycle=self.begin_cycle,
             episode_limit=self.episode_limit,
@@ -487,7 +504,7 @@ class Robocup2dEnv:
             P.trainer.write_opcode(tbuf, 8)
             # 3) Flip flags -> REQ(1,0) Submit request
             ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
-        
+            
         self.pass_trainer = False
 
         # 2) Write actions (only write at PlayOn sync point)
@@ -505,7 +522,7 @@ class Robocup2dEnv:
                     # print("wrote action:", int(actions[idx]))
                 ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
             # print("submitted all actions")
-            ready_to_act, cycle, gm, ball = ipc.wait_until_playon_or_done(
+            ready_to_act, cycle, gm = ipc.wait_until_playon_or_done(
                 cbuf=cbuf,
                 begin_cycle=self.begin_cycle,
                 episode_limit=self.episode_limit,
@@ -516,8 +533,7 @@ class Robocup2dEnv:
                 tag="step wait until playon or done",
                 current_coach_cycle=cycle0
             )
-            # print("ready_to_act after action submit:", ready_to_act)
-            # 0) Watchdog: Check if child processes are alive
+
             alive, dead, dead_info = proc.check_child_processes(self.procs, where="step1")
             self.procs = alive
             if dead:
@@ -535,30 +551,39 @@ class Robocup2dEnv:
                     log=self.log,
                     tag="step post-ready barrier",
                 )
+            else:
+                print("not ready to act")
 
         # 4) Settlement (read coach)
         cycle = int(P.coach.read_cycle(cbuf))
         gm = int(P.coach.read_gamemode(cbuf))
-        ball = P.coach.read_ball(cbuf, copy=True)
-
-        timeout = (self.begin_cycle >= 0) and ((cycle - self.begin_cycle) >= self.episode_limit)
-        scored = (abs(float(ball[0])) >= self.goal_x) and (abs(float(ball[1])) <= self.goal_y)
+        # ball = P.coach.read_ball(cbuf, copy=True)
+        goal = P.coach.read_goal_flag(cbuf)
+        timeout = (self.episode_steps >= self.episode_limit)
+        # scored = (abs(float(ball[0])) >= self.goal_x) and (abs(float(ball[1])) <= self.goal_y)
 
         reward = 0.0
         self.done = 0
 
-        if scored:
-            self.done = 1
-            reward = 1.0 if float(ball[0]) >= self.goal_x else -1.0
-        elif gm == 1 or timeout:
+        if timeout:
             self.done = 1
             reward = 0.0
+        elif goal==1:
+            self.done = 1
+            reward = 1.0
+        elif goal==-1:
+            self.done = 1
+            reward = -1.0
+        else:
+            self.done = 0
+            reward = 0.0        
 
         info = {
             "episode_limit": float(timeout),
             "cycle": int(cycle),
             "gamemode": int(gm),
         }
+        # print("done:", self.done, " reward:", reward, " info:", info,"turn_cycle:", self.episode_steps, "gm:", gm, "goal:", goal)
         return float(reward), bool(self.done), info
 
     def get_obs(self):
