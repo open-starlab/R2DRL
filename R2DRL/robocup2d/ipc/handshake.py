@@ -124,10 +124,6 @@ def wait_all_ready_or_raise(
 def wait_until_playon_or_done(
     *,
     cbuf,
-    begin_cycle: int,
-    episode_limit: int,
-    goal_x: float,
-    goal_y: float,
     max_stall_sec: float = 20.0,   # If cycle does not advance for this many seconds, consider it stalled.
     poll: float = 0.05,
     log=None,
@@ -170,11 +166,8 @@ def wait_until_playon_or_done(
         if current_coach_cycle is not None and cycle <= int(current_coach_cycle):
             time.sleep(float(poll))
             continue
-
-        timeout = (begin_cycle >= 0) and ((cycle - begin_cycle) >= int(episode_limit))
         
-        
-        if gm == 1 or timeout or (goal != 0):
+        if gm == 1  or (goal != 0):
             return False, cycle, gm
 
         if gm == 2:

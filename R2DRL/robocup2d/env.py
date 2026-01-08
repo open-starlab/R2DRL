@@ -192,7 +192,7 @@ class Robocup2dEnv:
 
     def _reset_once_no_reconnect(self):
         # 0) watchdog
-        # print("# 0) watchdog")
+        print("# 0) watchdog")
         alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect0")
         self.procs = alive
         if dead:
@@ -211,38 +211,12 @@ class Robocup2dEnv:
         cbuf = self.coach_shms[self.coach_name].buf
         tbuf = self.trainer_shms[self.trainer_name].buf
 
-        # 3) Wait for gm==PlayOn(2)
-        # print("# 3) Wait for gm==PlayOn(2)")
-        t_end = time.monotonic() + float(self.playon_timeout)
-        while time.monotonic() < t_end:
-            alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect1")
-            self.procs = alive
-            if dead:
-                raise RuntimeError("[watchdog] child process died:\n" + dead_info)
-
-
-            gm = int(P.coach.read_gamemode(cbuf))
-            cycle = int(P.coach.read_cycle(cbuf))
-
-            if gm == 1:
-                raise RuntimeError("[reset] gamemode=TimeOver(1)")
-
-            if gm == 2:
-                self.begin_cycle = cycle
-                P.coach.clear_goal_flag(cbuf)
-                break
-
-            time.sleep(0.05)
-
-        if self.begin_cycle < 0:
-            raise TimeoutError("[reset] Timeout waiting for PlayOn")
-
         bufs = []
         for k in self._obs_keys:
             shm_name = self.player_names[k]
             shm = self.player_shms[shm_name]
             bufs.append((shm.buf, f"{k} {shm_name}"))
-        # print("wait_all_ready_or_raise")
+        print("wait_all_ready_or_raise")
         ipc.wait_all_ready_or_raise(
             bufs,
             off_a=P.player.OFFSET_FLAG_A,
@@ -252,7 +226,7 @@ class Robocup2dEnv:
             log=self.log,
             tag="reset first-frame barrier",
         )
-
+        print("trainer")
         tflags=P.trainer.read_flags(tbuf)
         if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
             raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
@@ -261,6 +235,9 @@ class Robocup2dEnv:
         # 3) Flip flags -> REQ(1,0) Submit request
         ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
         self.pass_trainer = True
+        
+        P.coach.clear_goal_flag(cbuf)
+        print(f"goal flag cleared:{P.coach.read_goal_flag(cbuf)}")
 
         print("Reset Over!!!")
         return
@@ -360,6 +337,22 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][server] pid={p.pid} port={int(self.server_port)} pgid={os.getpgid(p.pid)}")
         time.sleep(1.0)
 
+        # trainer
+        p, _ = proc.launch_trainer(
+            trainer_dir=str(self.args["trainer_dir"]),
+            trainer_exe=str(self.args["trainer_exe"]),
+            host=str(self.args["host"]),
+            trainer_port=int(self.trainer_port),
+            team1=self.team1,
+            team2=self.team2,
+            logs_dir=self.log_dir,
+            trainer_shm_name=str(self.trainer_name),
+            env=env,
+            log_tag=f"{self.run_id}_",
+            server_wait_seconds=self.server_wait_seconds,
+        )
+        self.procs.append(p)
+
         # players
         player_procs, _ = proc.launch_players(
             player_dir=str(self.args["player_dir"]),
@@ -382,7 +375,25 @@ class Robocup2dEnv:
         )
         self.procs.extend(player_procs)
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
-        time.sleep(0.2)
+        # time.sleep(10)
+
+
+        bufs = []
+        for k in self._obs_keys:
+            shm_name = self.player_names[k]
+            shm = self.player_shms[shm_name]
+            bufs.append((shm.buf, f"{k} {shm_name}"))
+            
+        print("wait_all_ready_or_raise")
+        ipc.wait_all_ready_or_raise(
+            bufs,
+            off_a=P.player.OFFSET_FLAG_A,
+            off_b=P.player.OFFSET_FLAG_B,
+            timeout=self.wait_ready_timeout,
+            poll=0.0005,
+            log=self.log,
+            tag="reset first-frame barrier",
+        )
 
         # coach
         p, _ = proc.launch_coach(
@@ -401,25 +412,8 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][coach] pid={p.pid} port={int(self.coach_port)} shm={self.coach_name}")
         time.sleep(0.2)
 
-        # trainer
-        p, _ = proc.launch_trainer(
-            trainer_dir=str(self.args["trainer_dir"]),
-            trainer_exe=str(self.args["trainer_exe"]),
-            host=str(self.args["host"]),
-            trainer_port=int(self.trainer_port),
-            team1=self.team1,
-            team2=self.team2,
-            logs_dir=self.log_dir,
-            trainer_shm_name=str(self.trainer_name),
-            env=env,
-            log_tag=f"{self.run_id}_",
-            server_wait_seconds=self.server_wait_seconds,
-        )
-        self.procs.append(p)
-        # self.log.info(f"[{where}][trainer] pid={p.pid} port={int(self.trainer_port)} shm={self.trainer_name}")
-        time.sleep(0.2)
-
         self._collect_run_pgids()
+        print("_start_procs_only")
 
     def step(self, actions):
         """
@@ -473,15 +467,12 @@ class Robocup2dEnv:
 
         ready_to_act, cycle0, gm = ipc.wait_until_playon_or_done(
             cbuf=cbuf,
-            begin_cycle=self.begin_cycle,
-            episode_limit=self.episode_limit,
-            goal_x=self.goal_x,
-            goal_y=self.goal_y,
             max_stall_sec=self.playon_timeout,
             log=self.log,
             tag="step wait until playon or done",
         )
-        # print("ready_to_act:", ready_to_act)
+
+        cycle0 = int(P.coach.read_cycle(cbuf))
 
         if ready_to_act:
             ipc.wait_all_ready_or_raise(
@@ -524,10 +515,6 @@ class Robocup2dEnv:
             # print("submitted all actions")
             ready_to_act, cycle, gm = ipc.wait_until_playon_or_done(
                 cbuf=cbuf,
-                begin_cycle=self.begin_cycle,
-                episode_limit=self.episode_limit,
-                goal_x=self.goal_x,
-                goal_y=self.goal_y,
                 max_stall_sec=self.playon_timeout,
                 log=self.log,
                 tag="step wait until playon or done",
