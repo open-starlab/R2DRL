@@ -51,3 +51,17 @@ class ShmProtocolError(RuntimeError):
     """
 
     pass
+
+def _close_unlink(d):
+    for shm in d.values():
+        _safe(shm.close)
+        _safe(shm.unlink)
+
+def _as_popen(x):
+    return x.p if hasattr(x, "p") else x
+
+def _safe(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        return None

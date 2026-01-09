@@ -1,7 +1,8 @@
 from __future__ import annotations
 import os
 import psutil
-from typing import Optional, Set
+from typing import Optional, Set,Iterable
+import signal
 
 def _get_env_value(pid: int, key: str) -> Optional[str]:
     """
@@ -100,3 +101,51 @@ def kill_port_by_run_id(
             pass
 
     return killed
+
+def kill_run_process_groups(
+    sig: int,
+    run_pgids: Set[int],
+    run_pids: Set[int],
+    *,
+    log=None,
+    protect_pgid: Optional[int] = None,
+) -> None:
+    """
+    Kill process groups in run_pgids with signal sig, but only if:
+      - pgid != protect_pgid (default: current python pgid)
+      - at least one alive pid in run_pids is still a member of that pgid
+
+    Notes:
+      - Uses os.killpg => works on POSIX (Linux/macOS). Not for native Windows.
+    """
+    if protect_pgid is None:
+        protect_pgid = os.getpgrp()
+
+    pgids = set(run_pgids or [])
+    pids = set(run_pids or [])
+
+    for pgid in sorted(pgids):
+        if pgid == protect_pgid:
+            continue
+
+        alive_member = False
+        for pid in list(pids):
+            try:
+                if os.getpgid(pid) == pgid:
+                    alive_member = True
+                    break
+            except ProcessLookupError:
+                continue
+            except Exception:
+                continue
+
+        if not alive_member:
+            continue
+
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            pass
+        except Exception as e:
+            if log is not None:
+                log.warning(f"[teardown] killpg failed pgid={pgid} sig={sig} err={e}")

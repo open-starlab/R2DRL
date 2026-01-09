@@ -32,7 +32,15 @@ class Robocup2dEnv:
 
         self.n1 = int(self.args["n1"])
         self.n2 = int(self.args["n2"])
+
         self.team1 = self.args["team1"].lower()
+        if self.team1 == "base":
+            self.n_actions = int(P.player.BASE_MASK_NUM)   # 17
+        elif self.team1 == "hybrid":
+            self.n_actions = 4
+        else:
+            raise ValueError(f"Unknown team='{self.team1}', cannot infer action mode")
+        
         self.team2 = self.args["team2"]
 
         self.episode_limit = int(self.args["episode_limit"])
@@ -70,10 +78,8 @@ class Robocup2dEnv:
         self.done = 0
         self.last_obs = None
         self.last_avail_actions = None  # Likely to be used later
-        self._closed = False            # Protection suggested in close()
         self._port_lock_fd = None
         self._port_lock_path = None
-        self.pass_trainer = False
         self.episode_steps = 0
         self.turn_count = 0
 
@@ -96,107 +102,55 @@ class Robocup2dEnv:
 
         self._act_keys = sorted(self.player_names.keys())
         self._obs_keys = sorted(self.player_names.keys())
-        self.n_agents = self.n1
-        self.first_time=True
-        
+
+        #bufs
+        self.player_bufs = []
+        for k in self._obs_keys:
+            name = self.player_names[k]
+            self.player_bufs.append((self.player_shms[name].buf, f"{k} {name}"))
+
+        if self.team1 == "hybrid":
+            self._mask_len = 4
+            self._mask_off = P.player.OFFSET_HYBRID_MASK
+        else:
+            self._mask_len = 17
+            self._mask_off = P.player.OFFSET_MASK
+
+        self._mask_views = [
+            np.frombuffer(buf_mv, dtype=np.uint8, count=self._mask_len, offset=self._mask_off)
+            for (buf_mv, _tag) in self.player_bufs
+        ]
+
+        self._avail_out = np.empty((len(self._obs_keys), self._mask_len), dtype=np.int32)
+
+        self.cbuf = self.coach_shms[self.coach_name].buf
+        self.tbuf = self.trainer_shms[self.trainer_name].buf
+        self._obs_bufs = [buf_mv for (buf_mv, _tag) in self.player_bufs]
+        self._obs_out = np.empty((len(self._obs_bufs), P.player.STATE_NUM), dtype=np.float32)
+        self._closed = False
+        self.skip_trainer = False
+
     def get_avail_actions(self):
         if self.done == 1 and self.last_avail_actions is not None:
             return self.last_avail_actions
 
-        bufs = []
-        for k in self._obs_keys:
-            name = self.player_names[k]
-            bufs.append((self.player_shms[name].buf, f"{k} {name}"))
+        for i, v in enumerate(self._mask_views):
+            self._avail_out[i, :] = v
 
-        ipc.wait_all_ready_or_raise(
-            bufs,
-            off_a=P.player.OFFSET_FLAG_A,
-            off_b=P.player.OFFSET_FLAG_B,
-            timeout=self.wait_ready_timeout,
-            poll=0.0005,
-            log=self.log,
-            tag="get_avail_actions barrier",
-        )
-
-        masks = []
-        for k in self._obs_keys:
-            name = self.player_names[k]
-            buf = self.player_shms[name].buf
-
-            # Base mask (17) or Hybrid mask (4)
-            if self.team1 == "hybrid":
-                m = np.frombuffer(buf, dtype=np.uint8, count=4, offset=P.player.OFFSET_HYBRID_MASK)
-            else:
-                m = np.frombuffer(buf, dtype=np.uint8, count=17, offset=P.player.OFFSET_MASK)
-
-            masks.append(m.astype(np.int32, copy=False))
-
-        out = np.stack(masks, axis=0)
-        self.last_avail_actions = out
-        return out
+        self.last_avail_actions = self._avail_out
+        return self._avail_out.copy()
 
     def reset(self):
-        # print("reset!!!")
         self.turn_count += 1
         print("Turn:", self.turn_count)
-        if self.first_time:
-            if self._closed:
-                raise RuntimeError("env already closed; create a new env instance")
 
-            # Critical: Clean up old processes for each attempt (keep shm/run_id)
-            self._teardown_procs_only()
-            self._clear_shm_all()
+        if not self.procs:             # 第一次（或你 teardown 过）才会进来
+            self.start_procs(where="reset")
 
-            self._start_procs_only(where="reset")
-            # Actual reset logic
-            self._reset_once_no_reconnect()
-            self.first_time = False
-        else:
-            self._reset_once_no_reconnect()
-            
+        self._reset_once_no_reconnect()
 
-    def _clear_shm_all(self, *, clear_players=True, clear_coach=True, clear_trainer=True) -> None:
-        """
-        Zero out all created/attached shm buffers.
-        Note: Best called after old processes have stopped (e.g., after _teardown_procs_only in reset).
-        """
-        def _zero_one(shm_obj, tag: str):
-            if shm_obj is None:
-                return
-            try:
-                buf = shm_obj.buf  # memoryview
-                # Do not allocate huge bytes; overwrite directly with numpy
-                arr = np.frombuffer(buf, dtype=np.uint8)
-                arr[:] = 0
-            except Exception as e:
-                self.log.warning(f"[shm_clear] failed: {tag} err={e!r}")
-
-        if clear_coach:
-            for name, shm in getattr(self, "coach_shms", {}).items():
-                _zero_one(shm, f"coach:{name}")
-
-        if clear_trainer:
-            for name, shm in getattr(self, "trainer_shms", {}).items():
-                _zero_one(shm, f"trainer:{name}")
-
-        if clear_players:
-            for name, shm in getattr(self, "player_shms", {}).items():
-                _zero_one(shm, f"player:{name}")
-
-        # Safety: Clear Python side cache (optional, but usually done together)
-        self.begin_cycle = -1
-        self.last_state = None
-        self.last_obs = None
-        self.last_avail_actions = None
-        self.done = 0
 
     def _reset_once_no_reconnect(self):
-        # 0) watchdog
-        print("# 0) watchdog")
-        alive, dead, dead_info = proc.check_child_processes(self.procs, where="_reset_once_no_reconnect0")
-        self.procs = alive
-        if dead:
-            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
         # 1) Clear cache/flags
         self.last_state = None
@@ -207,44 +161,28 @@ class Robocup2dEnv:
         self.episode_steps = 0
 
 
-        # 2) coach/trainer buf (trainer not used yet, can be kept)
-        cbuf = self.coach_shms[self.coach_name].buf
-        tbuf = self.trainer_shms[self.trainer_name].buf
-
-        bufs = []
-        for k in self._obs_keys:
-            shm_name = self.player_names[k]
-            shm = self.player_shms[shm_name]
-            bufs.append((shm.buf, f"{k} {shm_name}"))
-        print("wait_all_ready_or_raise")
-        ipc.wait_all_ready_or_raise(
-            bufs,
+        ipc.wait_all_ready (
+            player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=self.wait_ready_timeout,
-            poll=0.0005,
+            timeout=self.playon_timeout,
             log=self.log,
-            tag="reset first-frame barrier",
         )
-        print("trainer")
-        tflags=P.trainer.read_flags(tbuf)
-        if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
+
+        tflags=P.trainer.read_flags(self.tbuf)
+        if not P.trainer.wait_flags(self.tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
             raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
-        P.trainer.write_fixed_reset(tbuf)
-        P.trainer.write_opcode(tbuf, 10)
-        # 3) Flip flags -> REQ(1,0) Submit request
-        ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
-        self.pass_trainer = True
-        
-        P.coach.clear_goal_flag(cbuf)
-        print(f"goal flag cleared:{P.coach.read_goal_flag(cbuf)}")
+        P.trainer.write_fixed_reset(self.tbuf)
+        P.trainer.write_opcode(self.tbuf, 10)
+        ipc.write_flags(self.tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
+        self.skip_trainer = True
+
+        P.coach.clear_goal_flag(self.cbuf)
 
         print("Reset Over!!!")
         return
 
     def _start_run(self, where: str = "init") -> None:
-        if self._closed:
-            raise RuntimeError("env already closed; create a new env instance")
 
         # Start function is not responsible for teardown
         if self.run_id is not None or self.procs or self._shm_names:
@@ -299,17 +237,8 @@ class Robocup2dEnv:
             log=self.log,
         )
 
-    def _start_procs_only(self, where: str = "reset") -> None:
-        """
-        Responsibilities:
-        - Teardown if old run exists
-        - Generate run_id + lock
-        - Select ports, create log/rcg directories
-        - Generate shm names and create shm
-        - Launch server/players/coach
-        - Collect pgid/pid
-        - Clear cache fields (last_state/obs/avail/done/begin_cycle)
-        """
+    def start_procs(self, where: str = "reset") -> None:
+
         env = dict(self.child_env)
         env["ROBOCUP2DRL_RUN_ID"] = self.run_id
 
@@ -377,22 +306,14 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
         # time.sleep(10)
 
-
-        bufs = []
-        for k in self._obs_keys:
-            shm_name = self.player_names[k]
-            shm = self.player_shms[shm_name]
-            bufs.append((shm.buf, f"{k} {shm_name}"))
-            
-        print("wait_all_ready_or_raise")
-        ipc.wait_all_ready_or_raise(
-            bufs,
+        ipc.wait_all_ready_or_done(
+            player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=self.wait_ready_timeout,
             poll=0.0005,
             log=self.log,
-            tag="reset first-frame barrier",
+            current_cycle=0,
+            stall_timeout=self.wait_ready_timeout,
         )
 
         # coach
@@ -412,142 +333,65 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][coach] pid={p.pid} port={int(self.coach_port)} shm={self.coach_name}")
         time.sleep(0.2)
 
-        self._collect_run_pgids()
-        print("_start_procs_only")
+        print("start_procs")
 
     def step(self, actions):
-        """
-        1) Watchdog: Raise error if child process dies
-        2) Wait for PlayOn and all controlled agents READY
-        3) Write actions + submit_req
-        4) Wait for next frame all READY
-        5) Read coach settlement: goal / timeover / timeout
-        """
-        # print("Step!!!")
-        # 0) Watchdog
+
         self.episode_steps += 1
-        alive, dead, dead_info = proc.check_child_processes(self.procs, where="step0")
-        self.procs = alive
-        if dead:
-            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
-        # Step even if done=1: Keep old habit, return directly
-        if self.done == 1:
-            return 0.0, True, {"episode_limit": 0.0}
-
-        # actions -> numpy (compatible with torch)
         if isinstance(actions, torch.Tensor):
             actions = actions.detach().cpu().numpy()
         actions = np.asarray(actions)
-        # print("actions:", actions)
 
-        # Determine Base/Hybrid (Hybrid is (n,3))
         is_hybrid = (actions.ndim == 2 and actions.shape[1] == 3)
-        # print("is_hybrid:", is_hybrid)
         if is_hybrid:
-            if not (actions.shape[0] == self.n_agents and actions.shape[1] == 3):
+            if not (actions.shape[0] == self.n1 and actions.shape[1] == 3):
                 raise RuntimeError(f"Hybrid expects actions.shape=(n_agents,3), received {actions.shape}")
         else:
             actions = actions.reshape(-1)
-            if actions.shape[0] != self.n_agents:
-                raise RuntimeError(f"Base expects {self.n_agents} actions, received {actions.shape[0]}")
+            if actions.shape[0] != self.n1:
+                raise RuntimeError(f"Base expects {self.n1} actions, received {actions.shape[0]}")
 
-        # coach buf
-        coach_shm = self.coach_shms[self.coach_name]
-        cbuf = coach_shm.buf
+        current_coach_cycle = int(P.coach.read_cycle(self.cbuf))
 
-        # episode_limit = self.episode_limit
-
-        # Prepare bufs in advance (for barrier)
-        bufs = []
-        for k in self._act_keys:
-            shm_name = self.player_names[k]
-            shm = self.player_shms[shm_name]
-            bufs.append((shm.buf, f"{k} {shm_name}"))
-
-        ready_to_act, cycle0, gm = ipc.wait_until_playon_or_done(
-            cbuf=cbuf,
-            max_stall_sec=self.playon_timeout,
-            log=self.log,
-            tag="step wait until playon or done",
-        )
-
-        cycle0 = int(P.coach.read_cycle(cbuf))
-
-        if ready_to_act:
-            ipc.wait_all_ready_or_raise(
-                bufs,
-                off_a=P.player.OFFSET_FLAG_A,
-                off_b=P.player.OFFSET_FLAG_B,
-                timeout=self.wait_ready_timeout,
-                poll=0.0005,
-                log=self.log,
-                tag="step pre-ready barrier",
-            )
-        if ready_to_act and not self.pass_trainer:    
-            trainer_shm = self.trainer_shms[self.trainer_name]   # 按你项目里的实际字段名
-            tbuf = trainer_shm.buf
-            tflags=P.trainer.read_flags(tbuf)
-
-            if not P.trainer.wait_flags(tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
+        #trainer
+        if self.skip_trainer is False:
+            tflags=P.trainer.read_flags(self.tbuf)
+            if not P.trainer.wait_flags(self.tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
                 raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
-            # P.trainer.write_fixed_reset(tbuf)
-            P.trainer.write_opcode(tbuf, 8)
-            # 3) Flip flags -> REQ(1,0) Submit request
-            ipc.write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
-            
-        self.pass_trainer = False
+            P.trainer.write_opcode(self.tbuf, 8)
+            ipc.write_flags(self.tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
+        self.skip_trainer = False
 
         # 2) Write actions (only write at PlayOn sync point)
-        if ready_to_act and self.n_agents > 0:
-            for idx, k in enumerate(self._act_keys):
-                shm_name = self.player_names[k]
-                shm = self.player_shms[shm_name]
-                buf = shm.buf
+        for idx, k in enumerate(self._act_keys):
+            shm_name = self.player_names[k]
+            shm = self.player_shms[shm_name]
+            buf = shm.buf
 
-                if is_hybrid:
-                    a, u0, u1 = actions[idx]
-                    P.player.write_hybrid_action(buf, int(a), float(u0), float(u1), clamp=True)
-                else:
-                    P.player.write_action(buf, int(actions[idx]))
-                    # print("wrote action:", int(actions[idx]))
-                ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
-            # print("submitted all actions")
-            ready_to_act, cycle, gm = ipc.wait_until_playon_or_done(
-                cbuf=cbuf,
-                max_stall_sec=self.playon_timeout,
-                log=self.log,
-                tag="step wait until playon or done",
-                current_coach_cycle=cycle0
-            )
-
-            alive, dead, dead_info = proc.check_child_processes(self.procs, where="step1")
-            self.procs = alive
-            if dead:
-                raise RuntimeError("[watchdog] child process died:\n" + dead_info)
-        
-            # print("after watchdog check")
-            if ready_to_act:
-                # 3) After writing actions: Wait for next frame all READY
-                ipc.wait_all_ready_or_raise(
-                    bufs,
-                    off_a=P.player.OFFSET_FLAG_A,
-                    off_b=P.player.OFFSET_FLAG_B,
-                    timeout=self.wait_ready_timeout,
-                    poll=0.0005,
-                    log=self.log,
-                    tag="step post-ready barrier",
-                )
+            if is_hybrid:
+                a, u0, u1 = actions[idx]
+                P.player.write_hybrid_action(buf, int(a), float(u0), float(u1), clamp=True)
             else:
-                print("not ready to act")
+                P.player.write_action(buf, int(actions[idx]))
+                # print("wrote action:", int(actions[idx]))
+            ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
+
+        # 3) After writing actions: Wait for done or all READY
+        _, cycle, gm, goal = ipc.wait_all_ready_or_done(
+            player_bufs=self.player_bufs,
+            off_a=P.player.OFFSET_FLAG_A,
+            off_b=P.player.OFFSET_FLAG_B,
+            cbuf=self.cbuf,
+            current_cycle=current_coach_cycle,
+            poll=0.0005,
+            stall_timeout=self.playon_timeout,
+            log=self.log,
+        )
 
         # 4) Settlement (read coach)
-        cycle = int(P.coach.read_cycle(cbuf))
-        gm = int(P.coach.read_gamemode(cbuf))
-        # ball = P.coach.read_ball(cbuf, copy=True)
-        goal = P.coach.read_goal_flag(cbuf)
+
         timeout = (self.episode_steps >= self.episode_limit)
-        # scored = (abs(float(ball[0])) >= self.goal_x) and (abs(float(ball[1])) <= self.goal_y)
 
         reward = 0.0
         self.done = 0
@@ -574,90 +418,36 @@ class Robocup2dEnv:
         return float(reward), bool(self.done), info
 
     def get_obs(self):
-        """
-        Returns obs: np.ndarray shape = (n_agents, 97)
-
-        Logic:
-        0) Watchdog: Raise error if child process dies (avoid getting stuck in wait)
-        1) Barrier: wait_ready_or_raise for all players one by one (ensure all READY)
-        2) Read all obs at once (second round read, reduce frame mixing probability)
-        """
-        # done cache
         if self.done == 1 and self.last_obs is not None:
             return self.last_obs
 
-        # 0) Watchdog: Check if child processes are alive
-        alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_obs")
-        self.procs = alive
-        if dead:
-            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
+        for i, buf in enumerate(self._obs_bufs):
+            self._obs_out[i, :] = P.player.read_obs_norm(
+                buf=buf,
+                field_length=self.half_length,
+                field_width=self.half_width,
+            )
 
-        # 1) Barrier: Ensure "all players" are READY first
-        # Collect all shm bufs needed for barrier at once
-        bufs = []
-        for k in self._obs_keys:
-            shm_name = self.player_names[k]
-            shm = self.player_shms[shm_name]
-            bufs.append((shm.buf, f"{k} {shm_name}"))
+        self.last_obs = self._obs_out
+        return self._obs_out.copy()
 
-        # Poll all until all READY (or raise error on total timeout)
-        ipc.wait_all_ready_or_raise(
-            bufs,
-            off_a=P.player.OFFSET_FLAG_A,
-            off_b=P.player.OFFSET_FLAG_B,
-            timeout=self.wait_ready_timeout,
-            poll=0.0005,
-            log=self.log,
-            tag="get_obs barrier",
-        )
-
-        # 2) Read obs at once (second round read)
-        obs_list = []
-        for k in self._obs_keys:
-            shm_name = self.player_names[k]
-            shm = self.player_shms[shm_name]
-            o = P.player.read_obs_norm(buf=shm.buf,field_length=self.half_length, field_width=self.half_width)  # float32[97]
-            obs_list.append(o)
-
-        obs = np.stack(obs_list, axis=0).astype(np.float32, copy=False)
-        self.last_obs = obs
-        return obs
 
     def get_state(self):
-        """
-        Read global state from coach shm:
-        state = ball(4) + players(22*6) => (136,)
-        No stable-read (no cycle check), read once and return directly.
-        """
-
-        # 0) Watchdog: Check if child processes are alive
-        alive, dead, dead_info = proc.check_child_processes(self.procs, where="get_state")
-        self.procs = alive
-        if dead:
-            raise RuntimeError("[watchdog] child process died:\n" + dead_info)
 
         # 1) done cache
         if self.done == 1 and self.last_state is not None:
             return self.last_state
 
         # 2) Read coach shm
-        shm = self.coach_shms[self.coach_name]
-        buf = shm.buf
 
         state = P.coach.read_state_norm(
-            buf,
+            buf=self.cbuf,
             field_length=self.half_length,
             field_width=self.half_width,
             copy=True,
         )
         self.last_state = state
         return state
-
-    def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        self._teardown_run()
 
     def __del__(self):
         # Do not raise exceptions during destruction
@@ -666,265 +456,66 @@ class Robocup2dEnv:
         except Exception:
             pass
 
-    def register_shm(self, name: str) -> None:
-        """Call immediately after create_shm() succeeds to ensure close() can clean up."""
-        if not name.startswith("/"):
-            name = "/" + name
-        self._shm_names.append(name)
-
     def get_env_info(self):
-        """
-        Return env_info for PyMARL.
-        Action mode is determined entirely by team1 name:
-          - team1 starts with "base" -> use base actions (17)
-          - team1 starts with "hybrid" -> use hybrid actions (e.g., 4, define yourself)
-        """
-        team_name = self.team1
 
-        # 1) Determine action count based on team1
-        if team_name.startswith("base"):
-            n_actions = P.player.BASE_MASK_NUM        # 17
-        elif team_name.startswith("hybrid"):
-            n_actions = 4                             # Your current hybrid action count, change to real one
-        else:
-            raise ValueError(f"Unknown team1='{self.team1}', cannot infer action mode")
-
-        # 2) Assemble env_info
         return {
             "n_agents": int(self.n1),                 # Only control the number of players in team1
-            "n_actions": int(n_actions),
+            "n_actions": int(self.n_actions),
             "state_shape": int(P.coach.COACH_STATE_FLOAT),  # 136
             "obs_shape": int(P.player.STATE_NUM),           # 97
             "episode_limit": int(self.episode_limit),
         }
-    def _teardown_procs_only(self) -> None:
-        # 0) Resample pgid/pid
-        try:
-            self._collect_run_pgids()
-        except Exception:
-            pass
-
-        def _as_popen(x):
-            return x.p if hasattr(x, "p") else x
-
-        popens = []
-        for item in list(getattr(self, "procs", [])):
-            p = _as_popen(item)
-            if p is not None:
-                popens.append(p)
-
-        # 1) TERM
-        try:
-            self._kill_run_process_groups(signal.SIGTERM)
-        except Exception:
-            pass
-
-        # 2) wait
-        t_end = time.time() + 2.0
-        for p in popens:
-            try:
-                if p.poll() is None:
-                    p.wait(timeout=max(0.0, t_end - time.time()))
-            except Exception:
-                pass
-
-        # 3) KILL
-        try:
-            self._kill_run_process_groups(signal.SIGKILL)
-        except Exception:
-            pass
-
-        # 5) Only clear "runtime cache", do not clear shm/ports/run_id
-        self.procs = []
-        self.begin_cycle = -1
-        self.last_state = None
+    
+    def close(self) -> None:
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+        self._mask_views = []
+        self.player_bufs = []
+        self._obs_bufs = []
+        self.cbuf = None
+        self.tbuf = None
+        self._avail_out = None
+        self._obs_out = None
         self.last_obs = None
+        self.last_state = None
         self.last_avail_actions = None
-        self.done = 0
-        
-        # At the end of _teardown_procs_only()
-        ports = [self.server_port, self.coach_port, self.trainer_port, self.debug_port]
-        ports = [p for p in ports if p is not None]
-        if ports:
-            ok = proc.wait_ports_free(ports, timeout=self.ports_wait_timeout, poll=0.05, hold=0.3)
-            if not ok:
-                self.log.warning(f"[teardown] ports still busy after wait: {ports}")
 
-    def _teardown_run(self) -> None:
-        # 0) Resample once (prevent _run_pgids/_run_pids from being empty or expired)
-        try:
-            self._collect_run_pgids()
-        except Exception:
-            pass
-
-        def _as_popen(x):
-            return x.p if hasattr(x, "p") else x
         popens = []
-        for item in list(getattr(self, "procs", [])):
-            p = _as_popen(item)
+        for item in self.procs:
+            p = P.common._as_popen(item)
             if p is not None:
                 popens.append(p)
 
-        # 1) TERM
-        try:
-            self._kill_run_process_groups(signal.SIGTERM)
-        except Exception:
-            pass
+        py_pgid = os.getpgrp()
+        run_pids, run_pgids = set(), set()
+        for p in popens:
+            st = P.common._safe(p.poll)
+            if st is None:
+                pid = int(p.pid)
+                run_pids.add(pid)
+                pgid = P.common._safe(os.getpgid, pid)
+                if pgid is not None and int(pgid) != py_pgid:
+                    run_pgids.add(int(pgid))
 
-        # 2) wait
+        P.common._safe(proc.kill_run_process_groups, signal.SIGTERM, run_pgids, run_pids, log=self.log)
+
         t_end = time.time() + 2.0
         for p in popens:
-            try:
-                if p.poll() is None:
-                    p.wait(timeout=max(0.0, t_end - time.time()))
-            except Exception:
-                pass
+            if p.poll() is None:
+                P.common._safe(p.wait, timeout=max(0.0, t_end - time.time()))
 
-        # 3) KILL
-        try:
-            self._kill_run_process_groups(signal.SIGKILL)
-        except Exception:
-            pass
+        P.common._safe(proc.kill_run_process_groups, signal.SIGKILL, run_pgids, run_pids, log=self.log)
 
-        # 4) (optional) port-based cleanup: only kill processes with same run_id
-        try:
-            if getattr(self, "run_id", None) is not None:
-                ports = []
-                for p in (self.server_port, self.trainer_port, self.coach_port, self.debug_port):
-                    if p is not None:
-                        ports.append(int(p))
-                for port in ports:
-                    proc.kill_port_by_run_id(port, run_id=self.run_id, log=self.log)
-        except Exception:
-            pass
+        P.common._safe(P.common._close_unlink, self.coach_shms)
+        P.common._safe(P.common._close_unlink, self.trainer_shms)
+        P.common._safe(P.common._close_unlink, self.player_shms)
 
-        # 5) shm close/unlink
-        def _destroy_owner_dict(d):
-            for name, shm in list(d.items()):
-                try: 
-                    shm.close()
-                except Exception: 
-                    pass
-                try: 
-                    shm.unlink()
-                except Exception: 
-                    pass
-            d.clear()
-
-        try: 
-            _destroy_owner_dict(getattr(self, "coach_shms", {}))
-        except Exception: 
-            pass
-        try: 
-            _destroy_owner_dict(getattr(self, "trainer_shms", {}))
-        except Exception: 
-            pass
-        try: 
-            _destroy_owner_dict(getattr(self, "player_shms", {}))
-        except Exception: 
-            pass
-
-        for name in list(getattr(self, "_shm_names", [])):
-            try:
-                if not str(name).startswith("/"):
-                    name = "/" + str(name)
-                ipc.cleanup_shm(name, unlink=True, log=self.log)
-            except Exception:
-                pass
-
-        # 6) release run lock
-        if getattr(self, "_lock_fd", None) is not None and getattr(self, "run_id", None) is not None:
-            try:
-                proc.release_run_lock(self.run_id, self._lock_fd, log=self.log)
-            except Exception:
-                pass
+        if self._lock_fd is not None and self.run_id is not None:
+            P.common._safe(proc.release_run_lock, self.run_id, self._lock_fd, log=self.log)
             self._lock_fd = None
 
-        # 7) clear
-        self.procs = []
-        self.coach_shms = {}
-        self.trainer_shms = {}
-        self.player_shms = {}
-        self._shm_names = []
-        self.coach_name = None
-        self.trainer_name = None
-        self.player_names = {}
-        self.log_dir = None
-        self.rcg_dir = None
-        self.base_port = None
-        self.server_port = None
-        self.trainer_port = None
-        self.coach_port = None
-        self.debug_port = None
-        self.run_id = None
-        self.begin_cycle = -1
-        self.last_state = None
-        self.last_obs = None
-        self.last_avail_actions = None
-        self.done = 0
-        self._run_pgids = set()
-        self._run_pids = set()
-
         if self._port_lock_fd is not None:
-            try: 
-                os.close(self._port_lock_fd)
-            except Exception: 
-                pass
+            P.common._safe(os.close, self._port_lock_fd)
             self._port_lock_fd = None
             self._port_lock_path = None
-
-    def _collect_run_pgids(self) -> None:
-        def _as_popen(x):
-            return x.p if hasattr(x, "p") else x
-        self._run_pgids = set()
-        self._run_pids = set()
-        py_pgid = os.getpgrp()
-
-        for item in list(getattr(self, "procs", [])):
-            p = _as_popen(item)
-            if p is None:
-                continue
-            if p.poll() is None:
-                pid = int(p.pid)
-                self._run_pids.add(pid)
-                pgid = os.getpgid(pid)
-                if pgid != py_pgid:
-                    self._run_pgids.add(pgid)
-
-
-        self.log.info(f"[run] python_pgid={py_pgid} run_pgids={sorted(self._run_pgids)} run_pids={sorted(self._run_pids)[:8]}{'...' if len(self._run_pids)>8 else ''}")
-
-    def _kill_run_process_groups(self, sig: int) -> None:
-        py_pgid = os.getpgrp()
-        pgids = set(getattr(self, "_run_pgids", set()))
-        pids  = set(getattr(self, "_run_pids", set()))
-
-        for pgid in sorted(pgids):
-            if pgid == py_pgid:
-                # self.log.warning(f"[teardown] skip killpg(pgid={pgid}) because it equals python pgid")
-                continue
-
-            # ✅ Critical: Confirm that "alive pids of this run" still exist in this pgid
-            alive_member = False
-            for pid in list(pids):
-                try:
-                    if os.getpgid(pid) == pgid:
-                        alive_member = True
-                        break
-                except ProcessLookupError:
-                    continue
-                except Exception:
-                    continue
-
-            if not alive_member:
-                # pgid may be empty/reused; do not kill
-                # self.log.info(f"[teardown] skip killpg pgid={pgid} sig={sig} (no alive member pid in this run)")
-                continue
-
-            try:
-                os.killpg(pgid, sig)
-                # self.log.info(f"[teardown] killpg pgid={pgid} sig={sig}")
-            except ProcessLookupError:
-                pass
-            except Exception as e:
-                self.log.warning(f"[teardown] killpg failed pgid={pgid} sig={sig} err={e}")
