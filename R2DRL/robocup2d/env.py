@@ -36,7 +36,9 @@ class Robocup2dEnv:
         self.team1 = self.args["team1"].lower()
         if self.team1 == "base":
             self.n_actions = int(P.player.BASE_MASK_NUM)   # 17
+            self.is_hybrid = False
         elif self.team1 == "hybrid":
+            self.is_hybrid = True
             self.n_actions = 4
         else:
             raise ValueError(f"Unknown team='{self.team1}', cannot infer action mode")
@@ -160,12 +162,13 @@ class Robocup2dEnv:
         self.begin_cycle = -1
         self.episode_steps = 0
 
-        ipc.wait_all_ready (
+        ipc.wait_all_ready(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
             log=self.log,
             tbuf=self.tbuf,
+            run_id=self.run_id,
         )
 
         tflags=P.trainer.read_flags(self.tbuf)
@@ -305,12 +308,13 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
         # time.sleep(10)
 
-        ipc.wait_all_ready (
+        ipc.wait_all_ready(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
             log=self.log,
             tbuf=self.tbuf,
+            run_id=self.run_id,
         )
 
         # coach
@@ -340,8 +344,7 @@ class Robocup2dEnv:
             actions = actions.detach().cpu().numpy()
         actions = np.asarray(actions)
 
-        is_hybrid = (actions.ndim == 2 and actions.shape[1] == 3)
-        if is_hybrid:
+        if self.is_hybrid:
             if not (actions.shape[0] == self.n1 and actions.shape[1] == 3):
                 raise RuntimeError(f"Hybrid expects actions.shape=(n_agents,3), received {actions.shape}")
         else:
@@ -366,7 +369,7 @@ class Robocup2dEnv:
             shm = self.player_shms[shm_name]
             buf = shm.buf
 
-            if is_hybrid:
+            if self.is_hybrid:
                 a, u0, u1 = actions[idx]
                 P.player.write_hybrid_action(buf, int(a), float(u0), float(u1), clamp=True)
             else:
@@ -374,22 +377,22 @@ class Robocup2dEnv:
                 # print("wrote action:", int(actions[idx]))
             ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
 
-        cycle, gm, goal = ipc.wait_all_ready_with_rescue(
+
+        ipc.wait_all_ready(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            cbuf=self.cbuf,
-            tbuf=self.tbuf,
-            current_cycle=current_coach_cycle,
             log=self.log,
-            is_hybrid=is_hybrid,
+            tbuf=self.tbuf,
+            run_id=self.run_id,
         )
-
 
         # 4) Settlement (read coach)
 
         timeout = (self.episode_steps >= self.episode_limit)
-
+        goal = P.coach.read_goal_flag(self.cbuf)
+        gm = P.coach.read_gamemode(self.cbuf)
+        cycle = P.coach.read_cycle(self.cbuf)
         reward = 0.0
         self.done = 0
 
