@@ -5,7 +5,7 @@ env_args:
   team1: Base
   team2: Helios
   episode_limit: 600
-  half_time: 60000
+  half_time: 600000
   seed: 123
 
   host: "localhost"
@@ -44,7 +44,7 @@ env_args:
 
   wait_ready_timeout: 36000.0
   playon_timeout: 36000.0
-  trainer_ready_timeout_ms: 36000000.0
+  trainer_ready_timeout_ms: 10000.0
   ports_wait_timeout: 36000.0
   server_wait_seconds: 360000.0
 

@@ -1,5 +1,6 @@
 gzcompressor.lo: gzcompressor.cpp /usr/include/stdc-predef.h \
- ../../config.h /usr/include/zlib.h /usr/include/zconf.h \
+ ../../config.h /home/h_qin/workspace6/anaconda3/include/zlib.h \
+ /home/h_qin/workspace6/anaconda3/include/zconf.h \
  /usr/lib/gcc/x86_64-linux-gnu/11/include/stddef.h \
  /usr/lib/gcc/x86_64-linux-gnu/11/include/limits.h \
  /usr/lib/gcc/x86_64-linux-gnu/11/include/syslimits.h \
@@ -171,8 +172,8 @@ gzcompressor.lo: gzcompressor.cpp /usr/include/stdc-predef.h \
  /usr/include/c++/11/bits/basic_string.tcc
 /usr/include/stdc-predef.h:
 ../../config.h:
-/usr/include/zlib.h:
-/usr/include/zconf.h:
+/home/h_qin/workspace6/anaconda3/include/zlib.h:
+/home/h_qin/workspace6/anaconda3/include/zconf.h:
 /usr/lib/gcc/x86_64-linux-gnu/11/include/stddef.h:
 /usr/lib/gcc/x86_64-linux-gnu/11/include/limits.h:
 /usr/lib/gcc/x86_64-linux-gnu/11/include/syslimits.h:

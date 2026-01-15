@@ -53,7 +53,7 @@ constexpr std::size_t align4_sz(std::size_t x) {
 //
 // 注意：poll_us 单位是微秒：100us = 0.1ms（不是 0.1s）
 // ============================================================================
-static constexpr int TRAINER_WAIT_REQ_TIMEOUT_MS = 30000;  // 30s
+static constexpr int TRAINER_WAIT_REQ_TIMEOUT_MS = 60*60*1000;  // 30s
 static constexpr int TRAINER_WAIT_REQ_POLL_US    = 100;    // 100us = 0.1ms
 
 static inline std::pair<std::uint8_t, std::uint8_t>

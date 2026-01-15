@@ -1,6 +1,6 @@
 sample_coach-sample_freeform_message.o: sample_freeform_message.cpp \
  /usr/include/stdc-predef.h ../../config.h sample_freeform_message.h \
- /home/h_qin/local/include/rcsc/common/freeform_message.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/freeform_message.h \
  /usr/include/c++/11/memory /usr/include/c++/11/bits/stl_algobase.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
@@ -171,10 +171,11 @@ sample_coach-sample_freeform_message.o: sample_freeform_message.cpp \
  /usr/include/c++/11/bits/basic_ios.tcc \
  /usr/include/c++/11/bits/ostream.tcc /usr/include/c++/11/istream \
  /usr/include/c++/11/bits/istream.tcc \
- /home/h_qin/local/include/rcsc/common/player_param.h \
- /home/h_qin/local/include/rcsc/rcg/types.h \
- /home/h_qin/local/include/rcsc/types.h /usr/include/c++/11/cmath \
- /usr/include/math.h /usr/include/x86_64-linux-gnu/bits/math-vector.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/player_param.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/rcg/types.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h \
+ /usr/include/c++/11/cmath /usr/include/math.h \
+ /usr/include/x86_64-linux-gnu/bits/math-vector.h \
  /usr/include/x86_64-linux-gnu/bits/libm-simd-decl-stubs.h \
  /usr/include/x86_64-linux-gnu/bits/flt-eval-method.h \
  /usr/include/x86_64-linux-gnu/bits/fp-logb.h \
@@ -202,7 +203,7 @@ sample_coach-sample_freeform_message.o: sample_freeform_message.cpp \
 /usr/include/stdc-predef.h:
 ../../config.h:
 sample_freeform_message.h:
-/home/h_qin/local/include/rcsc/common/freeform_message.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/freeform_message.h:
 /usr/include/c++/11/memory:
 /usr/include/c++/11/bits/stl_algobase.h:
 /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h:
@@ -412,9 +413,9 @@ sample_freeform_message.h:
 /usr/include/c++/11/bits/ostream.tcc:
 /usr/include/c++/11/istream:
 /usr/include/c++/11/bits/istream.tcc:
-/home/h_qin/local/include/rcsc/common/player_param.h:
-/home/h_qin/local/include/rcsc/rcg/types.h:
-/home/h_qin/local/include/rcsc/types.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/player_param.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/rcg/types.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h:
 /usr/include/c++/11/cmath:
 /usr/include/math.h:
 /usr/include/x86_64-linux-gnu/bits/math-vector.h:

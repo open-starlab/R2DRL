@@ -1,8 +1,8 @@
 planner/sample_player-cooperative_action.o: \
  planner/cooperative_action.cpp /usr/include/stdc-predef.h ../../config.h \
  planner/cooperative_action.h \
- /home/h_qin/local/include/rcsc/geom/vector_2d.h \
- /home/h_qin/local/include/rcsc/geom/angle_deg.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/vector_2d.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/angle_deg.h \
  /usr/include/c++/11/functional \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
@@ -195,8 +195,9 @@ planner/sample_player-cooperative_action.o: \
  /usr/include/c++/11/tr1/poly_hermite.tcc \
  /usr/include/c++/11/tr1/poly_laguerre.tcc \
  /usr/include/c++/11/tr1/riemann_zeta.tcc \
- /home/h_qin/local/include/rcsc/game_time.h \
- /home/h_qin/local/include/rcsc/types.h /usr/include/c++/11/memory \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_time.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h \
+ /usr/include/c++/11/memory \
  /usr/include/c++/11/bits/stl_raw_storage_iter.h \
  /usr/include/c++/11/bits/align.h /usr/include/c++/11/bit \
  /usr/include/c++/11/bits/unique_ptr.h \
@@ -213,8 +214,8 @@ planner/sample_player-cooperative_action.o: \
 /usr/include/stdc-predef.h:
 ../../config.h:
 planner/cooperative_action.h:
-/home/h_qin/local/include/rcsc/geom/vector_2d.h:
-/home/h_qin/local/include/rcsc/geom/angle_deg.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/vector_2d.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/angle_deg.h:
 /usr/include/c++/11/functional:
 /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h:
 /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h:
@@ -451,8 +452,8 @@ planner/cooperative_action.h:
 /usr/include/c++/11/tr1/poly_hermite.tcc:
 /usr/include/c++/11/tr1/poly_laguerre.tcc:
 /usr/include/c++/11/tr1/riemann_zeta.tcc:
-/home/h_qin/local/include/rcsc/game_time.h:
-/home/h_qin/local/include/rcsc/types.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_time.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h:
 /usr/include/c++/11/memory:
 /usr/include/c++/11/bits/stl_raw_storage_iter.h:
 /usr/include/c++/11/bits/align.h:

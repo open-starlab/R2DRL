@@ -151,7 +151,8 @@ Bhv_SetPlayKickOff::doKick( PlayerAgent * agent )
 
     Vector2D ball_vel = Vector2D::polar2vector( ball_speed,
                                                 ( target_point - wm.ball().pos() ).th() );
-    Vector2D ball_next = wm.ball().pos() + ball_next;
+    // Vector2D ball_next = wm.ball().pos() + ball_next;
+    Vector2D ball_next = wm.ball().pos() + ball_vel;
     while ( wm.self().pos().dist( ball_next ) < wm.self().playerType().kickableArea() + 0.2 )
     {
         ball_vel.setLength( ball_speed + 0.1 );

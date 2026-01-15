@@ -160,12 +160,10 @@ class Robocup2dEnv:
         self.begin_cycle = -1
         self.episode_steps = 0
 
-
         ipc.wait_all_ready (
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            timeout=self.playon_timeout,
             log=self.log,
         )
 
@@ -306,14 +304,11 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
         # time.sleep(10)
 
-        ipc.wait_all_ready_or_done(
+        ipc.wait_all_ready (
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
-            poll=0.0005,
             log=self.log,
-            current_cycle=0,
-            stall_timeout=self.wait_ready_timeout,
         )
 
         # coach
@@ -377,17 +372,17 @@ class Robocup2dEnv:
                 # print("wrote action:", int(actions[idx]))
             ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
 
-        # 3) After writing actions: Wait for done or all READY
-        _, cycle, gm, goal = ipc.wait_all_ready_or_done(
+        cycle, gm, goal = ipc.wait_all_ready_with_rescue(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
             cbuf=self.cbuf,
+            tbuf=self.tbuf,
             current_cycle=current_coach_cycle,
-            poll=0.0005,
-            stall_timeout=self.playon_timeout,
             log=self.log,
+            is_hybrid=is_hybrid,
         )
+
 
         # 4) Settlement (read coach)
 

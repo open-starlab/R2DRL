@@ -139,7 +139,8 @@ CoachInterceptPredictor::predictReachStep( const CoachPlayerObject & player,
                                ? std::max( 0, SP.foulCycles() - player.chargedCycle() )
                                : 0 );
 
-    const int min_step = predictMinStep( player, *ptype, control_area );
+    // const int min_step = predictMinStep( player, *ptype, control_area );
+    const int min_step = std::max(0, predictMinStep(player, *ptype, control_area));
     const int max_step = M_ball_cache.size() - 1;
 
     //

@@ -144,8 +144,9 @@ basic_actions/sample_player-intercept_evaluator.o: \
  /usr/include/c++/11/bits/algorithmfwd.h \
  /usr/include/c++/11/bits/stl_heap.h \
  /usr/include/c++/11/bits/uniform_int_dist.h \
- /home/h_qin/local/include/rcsc/factory.h /usr/include/c++/11/map \
- /usr/include/c++/11/bits/stl_tree.h /usr/include/c++/11/bits/stl_map.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/factory.h \
+ /usr/include/c++/11/map /usr/include/c++/11/bits/stl_tree.h \
+ /usr/include/c++/11/bits/stl_map.h \
  /usr/include/c++/11/bits/stl_multimap.h /usr/include/c++/11/list \
  /usr/include/c++/11/bits/stl_list.h /usr/include/c++/11/bits/list.tcc \
  /usr/include/c++/11/stack /usr/include/c++/11/deque \
@@ -365,7 +366,7 @@ basic_actions/intercept_evaluator.h:
 /usr/include/c++/11/bits/algorithmfwd.h:
 /usr/include/c++/11/bits/stl_heap.h:
 /usr/include/c++/11/bits/uniform_int_dist.h:
-/home/h_qin/local/include/rcsc/factory.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/factory.h:
 /usr/include/c++/11/map:
 /usr/include/c++/11/bits/stl_tree.h:
 /usr/include/c++/11/bits/stl_map.h:

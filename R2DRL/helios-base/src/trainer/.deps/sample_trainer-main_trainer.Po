@@ -147,13 +147,13 @@ sample_trainer-main_trainer.o: main_trainer.cpp \
  /usr/include/c++/11/bits/invoke.h /usr/include/c++/11/bits/refwrap.h \
  /usr/include/c++/11/bits/unique_ptr.h \
  /usr/include/c++/11/bits/this_thread_sleep.h \
- /home/h_qin/local/include/rcsc/trainer/trainer_agent.h \
- /home/h_qin/local/include/rcsc/trainer/trainer_config.h \
- /home/h_qin/local/include/rcsc/coach/coach_world_model.h \
- /home/h_qin/local/include/rcsc/coach/coach_world_state.h \
- /home/h_qin/local/include/rcsc/coach/coach_ball_object.h \
- /home/h_qin/local/include/rcsc/geom/vector_2d.h \
- /home/h_qin/local/include/rcsc/geom/angle_deg.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/trainer/trainer_agent.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/trainer/trainer_config.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_world_model.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_world_state.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_ball_object.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/vector_2d.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/angle_deg.h \
  /usr/include/c++/11/functional /usr/include/c++/11/bits/std_function.h \
  /usr/include/c++/11/unordered_map \
  /usr/include/c++/11/ext/aligned_buffer.h \
@@ -210,13 +210,14 @@ sample_trainer-main_trainer.o: main_trainer.cpp \
  /usr/include/c++/11/tr1/poly_hermite.tcc \
  /usr/include/c++/11/tr1/poly_laguerre.tcc \
  /usr/include/c++/11/tr1/riemann_zeta.tcc \
- /home/h_qin/local/include/rcsc/types.h \
- /home/h_qin/local/include/rcsc/coach/coach_player_object.h \
- /home/h_qin/local/include/rcsc/common/stamina_model.h \
- /home/h_qin/local/include/rcsc/common/player_type.h \
- /home/h_qin/local/include/rcsc/soccer_math.h \
- /home/h_qin/local/include/rcsc/game_time.h \
- /home/h_qin/local/include/rcsc/game_mode.h /usr/include/c++/11/memory \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_player_object.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/stamina_model.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/player_type.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/soccer_math.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_time.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_mode.h \
+ /usr/include/c++/11/memory \
  /usr/include/c++/11/bits/stl_raw_storage_iter.h \
  /usr/include/c++/11/bits/align.h /usr/include/c++/11/bit \
  /usr/include/c++/11/bits/shared_ptr.h \
@@ -231,12 +232,12 @@ sample_trainer-main_trainer.o: main_trainer.cpp \
  /usr/include/c++/11/map /usr/include/c++/11/bits/stl_tree.h \
  /usr/include/c++/11/bits/stl_map.h \
  /usr/include/c++/11/bits/stl_multimap.h \
- /home/h_qin/local/include/rcsc/coach/player_type_analyzer.h \
- /home/h_qin/local/include/rcsc/clang/types.h \
- /home/h_qin/local/include/rcsc/common/soccer_agent.h \
- /home/h_qin/local/include/rcsc/common/abstract_client.h \
- /home/h_qin/local/include/rcsc/param/cmd_line_parser.h \
- /home/h_qin/local/include/rcsc/param/param_parser.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/player_type_analyzer.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/clang/types.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/soccer_agent.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/abstract_client.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/param/cmd_line_parser.h \
+ /fsws1/h_qin/robocup/robocup/librcsc/rcsc/param/param_parser.h \
  /usr/include/c++/11/cstring /usr/include/string.h /usr/include/strings.h \
  /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
  /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
@@ -453,13 +454,13 @@ sample_trainer.h:
 /usr/include/c++/11/bits/refwrap.h:
 /usr/include/c++/11/bits/unique_ptr.h:
 /usr/include/c++/11/bits/this_thread_sleep.h:
-/home/h_qin/local/include/rcsc/trainer/trainer_agent.h:
-/home/h_qin/local/include/rcsc/trainer/trainer_config.h:
-/home/h_qin/local/include/rcsc/coach/coach_world_model.h:
-/home/h_qin/local/include/rcsc/coach/coach_world_state.h:
-/home/h_qin/local/include/rcsc/coach/coach_ball_object.h:
-/home/h_qin/local/include/rcsc/geom/vector_2d.h:
-/home/h_qin/local/include/rcsc/geom/angle_deg.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/trainer/trainer_agent.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/trainer/trainer_config.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_world_model.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_world_state.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_ball_object.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/vector_2d.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/geom/angle_deg.h:
 /usr/include/c++/11/functional:
 /usr/include/c++/11/bits/std_function.h:
 /usr/include/c++/11/unordered_map:
@@ -528,13 +529,13 @@ sample_trainer.h:
 /usr/include/c++/11/tr1/poly_hermite.tcc:
 /usr/include/c++/11/tr1/poly_laguerre.tcc:
 /usr/include/c++/11/tr1/riemann_zeta.tcc:
-/home/h_qin/local/include/rcsc/types.h:
-/home/h_qin/local/include/rcsc/coach/coach_player_object.h:
-/home/h_qin/local/include/rcsc/common/stamina_model.h:
-/home/h_qin/local/include/rcsc/common/player_type.h:
-/home/h_qin/local/include/rcsc/soccer_math.h:
-/home/h_qin/local/include/rcsc/game_time.h:
-/home/h_qin/local/include/rcsc/game_mode.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/types.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/coach_player_object.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/stamina_model.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/player_type.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/soccer_math.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_time.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/game_mode.h:
 /usr/include/c++/11/memory:
 /usr/include/c++/11/bits/stl_raw_storage_iter.h:
 /usr/include/c++/11/bits/align.h:
@@ -554,12 +555,12 @@ sample_trainer.h:
 /usr/include/c++/11/bits/stl_tree.h:
 /usr/include/c++/11/bits/stl_map.h:
 /usr/include/c++/11/bits/stl_multimap.h:
-/home/h_qin/local/include/rcsc/coach/player_type_analyzer.h:
-/home/h_qin/local/include/rcsc/clang/types.h:
-/home/h_qin/local/include/rcsc/common/soccer_agent.h:
-/home/h_qin/local/include/rcsc/common/abstract_client.h:
-/home/h_qin/local/include/rcsc/param/cmd_line_parser.h:
-/home/h_qin/local/include/rcsc/param/param_parser.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/coach/player_type_analyzer.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/clang/types.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/soccer_agent.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/common/abstract_client.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/param/cmd_line_parser.h:
+/fsws1/h_qin/robocup/robocup/librcsc/rcsc/param/param_parser.h:
 /usr/include/c++/11/cstring:
 /usr/include/string.h:
 /usr/include/strings.h:

@@ -186,40 +186,40 @@ AUTOCONF = ${SHELL} /fsws1/h_qin/robocup/robocup/helios-base/config/missing auto
 AUTOHEADER = ${SHELL} /fsws1/h_qin/robocup/robocup/helios-base/config/missing autoheader
 AUTOMAKE = ${SHELL} /fsws1/h_qin/robocup/robocup/helios-base/config/missing automake-1.16
 AWK = gawk
-BOOST_CPPFLAGS = -I/usr/include
-BOOST_LDFLAGS = -L/usr/lib/x86_64-linux-gnu
+BOOST_CPPFLAGS = -I/home/h_qin/workspace6/anaconda3/include
+BOOST_LDFLAGS = -L/home/h_qin/workspace6/anaconda3/lib
 BOOST_SYSTEM_LIB = -lboost_system
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
-CPPFLAGS =  -I/usr/include -I/home/h_qin/local/include
+CPPFLAGS = -I/fsws1/h_qin/robocup/robocup/librcsc -I/home/h_qin/workspace6/anaconda3/include -I/home/h_qin/workspace6/anaconda3/include
 CXX = g++ -std=c++17
 CXXCPP = g++ -std=c++17 -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
+CXXFLAGS = -g -O2
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
 ECHO_C = 
 ECHO_N = -n
 ECHO_T = 
-EGREP = /usr/bin/grep -E
+EGREP = /bin/grep -E
 EXEEXT = 
-GREP = /usr/bin/grep
+GREP = /bin/grep
 HAVE_CXX17 = 1
 INSTALL = /usr/bin/install -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LDFLAGS = -fsanitize=address,undefined -L/usr/lib/x86_64-linux-gnu -L/home/h_qin/local/lib
+LDFLAGS = -L/fsws1/h_qin/robocup/robocup/librcsc/rcsc/.libs -Wl,-rpath,/fsws1/h_qin/robocup/robocup/librcsc/rcsc/.libs -L/home/h_qin/workspace6/anaconda3/lib -Wl,-rpath,/home/h_qin/workspace6/anaconda3/lib -L/home/h_qin/workspace6/anaconda3/lib
 LIBOBJS = 
-LIBRCSC_LIBDIR = /home/h_qin/local/lib
+LIBRCSC_LIBDIR = /usr/local/lib
 LIBS = -lrcsc -lz -lm -lboost_system 
 LN_S = ln -s
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} /fsws1/h_qin/robocup/robocup/helios-base/config/missing makeinfo
-MKDIR_P = /usr/bin/mkdir -p
+MKDIR_P = /bin/mkdir -p
 OBJEXT = o
 PACKAGE = helios-base
 PACKAGE_BUGREPORT = hidehisaakiyama@users.noreply.github.com

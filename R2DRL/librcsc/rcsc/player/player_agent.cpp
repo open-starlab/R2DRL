@@ -1045,27 +1045,17 @@ PlayerAgent::handleTimeout( const int timeout_count,
                   timeout_count );
 
     // estimate server down
-    // if ( waited_msec > config().serverWaitSeconds() * 1000 )
-    // {
-    //     std::cout << world().teamName() << ' '
-    //               << world().self().unum() << ": "
-    //               << "waited "
-    //               << waited_msec / 1000
-    //               << " seconds. server down??" << std::endl;
-    //     M_client->setServerAlive( false );
-    //     return;
-    // }
     if ( waited_msec > config().serverWaitSeconds() * 1000 )
     {
-        std::cout << "[TIMEOUT][EXIT] waited_msec=" << waited_msec
-                << " threshold_msec=" << config().serverWaitSeconds() * 1000
-                << " timeout_count=" << timeout_count
-                << " msec_from_sense=" << msec_from_sense
-                << std::endl;
-
-        M_client->setServerAlive(false);
+        std::cout << world().teamName() << ' '
+                  << world().self().unum() << ": "
+                  << "waited "
+                  << waited_msec / 1000
+                  << " seconds. server down??" << std::endl;
+        M_client->setServerAlive( false );
         return;
     }
+
 
     // check alarm count etc...
     // if ( M_impl->isDecisionTiming( msec_from_sense, timeout_count ) )

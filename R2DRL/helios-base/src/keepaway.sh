@@ -10,7 +10,7 @@ echo " All rights reserved."
 echo "******************************************************************"
 
 
-LIBPATH=/home/h_qin/local/lib
+LIBPATH=/usr/local/lib
 if [ x"$LIBPATH" != x ]; then
   if [ x"$LD_LIBRARY_PATH" = x ]; then
     LD_LIBRARY_PATH=$LIBPATH

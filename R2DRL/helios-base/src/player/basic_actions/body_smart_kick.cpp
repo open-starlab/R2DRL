@@ -111,6 +111,43 @@ Body_SmartKick::execute( PlayerAgent * agent )
 
         Vector2D vel = M_sequence.pos_list_.front() - wm.ball().pos();
         Vector2D kick_accel = vel - wm.ball().vel();
+        
+        const double kick_rate = wm.self().kickRate();
+        const double kick_power = kick_accel.r() / kick_rate;          // doKick 的 power
+        const double kick_dir   = (kick_accel.th() - wm.self().body()).degree(); // doKick 的 dir (deg)
+
+        // 关键调试：看是不是 power 太小/方向异常/球速无效
+        std::cerr << "[SmartKick]"
+                  << " kickable=" << wm.self().isKickable()
+                  << " dist=" << wm.self().distFromBall()
+                  << " kickRate=" << kick_rate
+                  << " body=" << wm.self().body().degree()
+                  << " ball_pos=(" << wm.ball().pos().x << "," << wm.ball().pos().y << ")"
+                  << " ball_vel=(" << wm.ball().vel().x << "," << wm.ball().vel().y << ")"
+                  << " target=(" << M_target_point.x << "," << M_target_point.y << ")"
+                  << " first_speed=" << first_speed
+                  << " thr=" << first_speed_thr
+                  << " max_step=" << max_step
+                  << " achieved_speed=" << M_sequence.speed_
+                  << " seq_power=" << M_sequence.power_
+                  << " steps=" << M_sequence.pos_list_.size()
+                  << " kick_accel=(" << kick_accel.x << "," << kick_accel.y << ")"
+                  << " doKick(power=" << kick_power << ", dir=" << kick_dir << "deg)"
+                  << std::endl;
+
+        // 如果你也想进 dlog（rcg logger），加这一句
+        dlog.addText(Logger::KICK,
+                     "(SmartKick DEBUG) dist=%.3f kickRate=%.5f body=%.2f "
+                     "ball_vel=(%.3f %.3f) achieved_speed=%.3f seq_power=%.2f "
+                     "kick_accel=(%.3f %.3f) doKick(power=%.2f dir=%.2fdeg)",
+                     wm.self().distFromBall(),
+                     kick_rate,
+                     wm.self().body().degree(),
+                     wm.ball().vel().x, wm.ball().vel().y,
+                     M_sequence.speed_, M_sequence.power_,
+                     kick_accel.x, kick_accel.y,
+                     kick_power, kick_dir);
+        
         agent->doKick( kick_accel.r() / wm.self().kickRate(),
                        kick_accel.th() - wm.self().body() );
         std::cerr <<  " smart kick!" << std::endl;

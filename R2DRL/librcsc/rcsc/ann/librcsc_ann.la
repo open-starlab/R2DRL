@@ -17,7 +17,7 @@ old_library='librcsc_ann.a'
 inherited_linker_flags=''
 
 # Libraries that this one depends upon.
-dependency_libs=' -lz'
+dependency_libs=' -L/home/h_qin/workspace6/anaconda3/lib -lz'
 
 # Names of additional weak libraries provided by this library
 weak_library_names=''
