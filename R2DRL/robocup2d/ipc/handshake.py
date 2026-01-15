@@ -258,8 +258,7 @@ def wait_all_ready(
             rescued_names.clear()
             trainer_sent_in_window = False
 
-        mixed_00_01 = ((0, 0) in dist) and (FLAGS_READY in dist) and (len(dist) <= 2)
-        stuck = mixed_00_01 and ((now - last_change_t) >= float(stuck_window))
+        stuck = ((now - last_change_t) >= float(stuck_window))
 
         # 3) rescue: stable + 有可推的 READY(01)
         if stuck and ready_unserved and (now - last_rescue_t) >= float(rescue_cooldown):
@@ -299,129 +298,6 @@ def wait_all_ready(
                 log.info(
                     f"[rescue]{tag} stuck(mixed00/01) pushed={pushed} "
                     f"dist={dict(dist)} pending={len(pending)}{trainer_str}"
-                )
-
-        time.sleep(float(poll))
-
-
-
-def push_through_transition_frame(
-    *,
-    player_bufs: Iterable[Tuple[object, str]],   # [(buf, name), ...]
-    off_a: int,
-    off_b: int,
-    cbuf,
-    current_cycle: int,
-    default_action_fn: Callable[[object, str], None],
-    poll: float = 0.0005,
-    # 下面两个窗口控制“何时判定确实卡住需要推”
-    stuck_window: float = 0.01,   # 混态分布保持不变超过该时间 -> 认为卡住
-    max_wait: float = 0.05,       # 总共最多等这么久，希望在这段时间内推到 cycle 前进
-    # trainer 只观察，不等待；flags==11 直接忽略（按你要求）
-    tbuf=None,
-    read_trainer_flags: Optional[Callable[[object], Tuple[int, int]]] = None,  # fn(tbuf)->(a,b)
-    log=None,
-    tag: str = "",
-) -> int:
-    """
-    推进“过渡帧”的小函数：
-      - 监控 player flags 分布是否长期混在 {00,01} 且不变
-      - 一旦确认卡住，对 READY(01) 且未 served 的球员补写默认动作 + 置 REQ(10)
-      - 返回：推进后的新 cycle（必定 > current_cycle），否则抛 RuntimeError
-
-    注意：default_action_fn 由你决定写什么动作（“扔不动”）。
-    """
-
-    t_start = time.monotonic()
-    t_end   = t_start + float(max_wait)
-
-    served = set()  # 本函数内，哪些 READY 的球员已经被补写过默认动作
-
-    last_dist = None
-    last_change_t = time.monotonic()
-
-    # 为了少打印，最多展开若干 pending 详情
-    def _fmt_some(pairs, limit=8):
-        return ", ".join(pairs[:limit]) + (" ..." if len(pairs) > limit else "")
-
-    while True:
-        # 1) 先看 coach cycle 是否已经推进
-        cycle = int(P.coach.read_cycle(cbuf))
-        if cycle > int(current_cycle):
-            return cycle
-
-        now = time.monotonic()
-        if now >= t_end:
-            # 超时：给出诊断信息
-            pending_details = []
-            flag_pairs = []
-            for buf, name in player_bufs:
-                a, b = read_flags(buf, off_a, off_b)
-                flag_pairs.append((a, b))
-                pending_details.append(f"{name}=({a},{b})")
-            dist = Counter(flag_pairs)
-
-            trainer_str = ""
-            if (tbuf is not None) and (read_trainer_flags is not None):
-                ta, tb = read_trainer_flags(tbuf)
-                trainer_str = f" trainer=({ta},{tb})"
-
-            msg = (
-                f"[push]{tag} failed to advance cycle within max_wait={max_wait}s; "
-                f"current_cycle={current_cycle} now_cycle={cycle} "
-                f"dist={dict(dist)} details={_fmt_some(pending_details)}{trainer_str}"
-            )
-            if log:
-                log.info(msg)
-            raise RuntimeError(msg)
-
-        # 2) 统计 flags 分布，并检测“是否卡住不变”
-        flag_pairs = []
-        ready_names = []
-        ready_unserved = []
-
-        for buf, name in player_bufs:
-            a, b = read_flags(buf, off_a, off_b)
-            flag_pairs.append((a, b))
-            if (a, b) == FLAGS_READY:
-                ready_names.append(name)
-                if name not in served:
-                    ready_unserved.append((buf, name))
-
-        dist = Counter(flag_pairs)
-
-        if dist != last_dist:
-            last_dist = dist
-            last_change_t = now
-
-        # 3) trainer：只观察，不等待；11 直接忽略
-        if (tbuf is not None) and (read_trainer_flags is not None):
-            ta, tb = read_trainer_flags(tbuf)
-            # 你要求：如果 trainer==11 不用管
-            # 这里其他状态也不做 barrier，只用于日志定位
-            if log and (ta, tb) not in [(1, 1), (0, 1)]:
-                log.info(f"[push]{tag} trainer_flags=({ta},{tb})")
-
-        # 4) 判定是否需要“推一把”
-        #    典型卡死：dist 里同时出现 (0,0) 和 (0,1)，并且分布 stuck_window 内不变
-        mixed_00_01 = ((0, 0) in dist) and (FLAGS_READY in dist)
-        stuck = mixed_00_01 and ((now - last_change_t) >= float(stuck_window))
-
-        # 5) 推：对 READY(01) 且未 served 的球员补写默认动作 + 置 REQ(10)
-        #    注意：这一步不影响已经是 REQ/ACK 的球员；只对仍然 READY 的球员下发
-        if stuck and ready_unserved:
-            for buf, name in ready_unserved:
-                # 再读一次，确保仍是 READY
-                if read_flags(buf, off_a, off_b) != FLAGS_READY:
-                    continue
-                default_action_fn(buf, name)
-                write_flags(buf, off_a, off_b, FLAGS_REQ)
-                served.add(name)
-
-            if log:
-                log.info(
-                    f"[push]{tag} stuck(mixed00/01) -> flushed={len(ready_unserved)} "
-                    f"served={len(served)} dist={dict(dist)}"
                 )
 
         time.sleep(float(poll))
@@ -521,7 +397,7 @@ def wait_all_ready_with_rescue(
             continue
 
         # ---- stall：判断是否可 rescue ----
-        can_rescue_players = (n_other == 0 and n01 > 0 and n00 > 0)
+        can_rescue_players = (n01 > 0 and not all_ready)
 
         # 同一 cycle 已经 rescue 过：给它时间推进，不要立刻报错/重复推
         if can_rescue_players and cycle == last_rescue_cycle:
