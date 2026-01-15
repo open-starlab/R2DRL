@@ -158,50 +158,151 @@ def wait_all_ready_or_done(
 
         if not progressed:
             time.sleep(float(poll))
-
 def wait_all_ready(
     *,
-    player_bufs,          # [(buf, name), ...]
+    player_bufs,                 # [(buf, name), ...]
     off_a: int,
     off_b: int,
     timeout: float = 20.0,
-    poll: float = 0.001,
+    poll: float = 0.0005,
     log=None,
+    tag: str = "",
+
+    # --- stable-state rescue (no coach / no cycle) ---
+    tbuf=None,                   # trainer shm buf (optional)
+    trainer_opcode: int = 8,
+
+    stuck_window: float = 0.01,  # 00/01 混态分布保持不变超过该时间 -> 触发救援
+    rescue_cooldown: float = 0.02,  # rescue 后给系统一点推进时间（防止狂推）
+
+    # default action to push one transition
+    is_hybrid: bool = False,
+    default_action_base: int = 2,                 # doIntercept
+    default_action_hybrid=(0, 0.5, 0.5),          # (a,u0,u1)
 ):
-    """只等所有 player 到 READY；成功 return；超时 raise ShmProtocolError。"""
+    """
+    等待所有 player flags == READY(0,1)；满足则直接 return（与原版一致）。
+
+    若未全 READY，但进入稳定态（pending 的 flags 只出现 {00,01} 且同时存在 00/01，
+    且该分布在 stuck_window 内不变），则执行“推进救援”：
+      - 对仍为 READY(01) 的 pending 球员：写入默认动作 + 置 REQ(10)
+      - trainer：仅用于一起推进/诊断；trainer==11 忽略；仅 trainer==01 时写 opcode+REQ
+    然后继续等待直到全 READY 或 timeout。
+    """
     pending = list(player_bufs)
     if not pending:
         return
 
     t_end = time.monotonic() + float(timeout)
 
-    while True:
-        progressed = False
+    last_dist = None
+    last_change_t = time.monotonic()
 
+    last_rescue_t = 0.0
+    rescued_names = set()     # 本次稳定窗口内已推过的 READY 球员
+    trainer_sent_in_window = False
+
+    while True:
+        # 1) pop READY
         i = 0
         while i < len(pending):
             buf, name = pending[i]
             if read_flags(buf, off_a, off_b) == FLAGS_READY:
                 pending.pop(i)
-                progressed = True
+                rescued_names.discard(name)
                 continue
             i += 1
 
         if not pending:
             return
 
-        if time.monotonic() >= t_end:
-            details = []
+        now = time.monotonic()
+        if now >= t_end:
+            pairs, details = [], []
             for buf, name in pending:
                 a, b = read_flags(buf, off_a, off_b)
+                a = int(a); b = int(b)
+                pairs.append((a, b))
                 details.append(f"{name}=({a},{b})")
-            msg = "wait_all_ready timeout: pending=" + ", ".join(details)
+            dist = Counter(pairs)
+
+            trainer_str = ""
+            if tbuf is not None:
+                ta, tb = P.trainer.read_flags(tbuf)
+                trainer_str = f" trainer_flags=({int(ta)},{int(tb)})"
+
+            msg = (
+                f"[wait_all_ready]{tag} timeout: pending={len(pending)} "
+                f"dist={dict(dist)} details=" + ", ".join(details) + trainer_str
+            )
             if log:
                 log.info(msg)
             raise ShmProtocolError(msg)
 
-        if not progressed:
-            time.sleep(float(poll))
+        # 2) compute pending dist + detect stable mixed {00,01}
+        pairs = []
+        ready_unserved = []  # pending 中当前为 01 且还没推过的
+        for buf, name in pending:
+            a, b = read_flags(buf, off_a, off_b)
+            a = int(a); b = int(b)
+            pairs.append((a, b))
+            if (a, b) == FLAGS_READY and name not in rescued_names:
+                ready_unserved.append((buf, name))
+
+        dist = Counter(pairs)
+
+        # dist 变化 -> 新窗口：刷新计时/状态
+        if dist != last_dist:
+            last_dist = dist
+            last_change_t = now
+            rescued_names.clear()
+            trainer_sent_in_window = False
+
+        mixed_00_01 = ((0, 0) in dist) and (FLAGS_READY in dist) and (len(dist) <= 2)
+        stuck = mixed_00_01 and ((now - last_change_t) >= float(stuck_window))
+
+        # 3) rescue: stable + 有可推的 READY(01)
+        if stuck and ready_unserved and (now - last_rescue_t) >= float(rescue_cooldown):
+            # trainer push (optional)
+            if tbuf is not None and (not trainer_sent_in_window):
+                ta, tb = P.trainer.read_flags(tbuf)
+                ta = int(ta); tb = int(tb)
+                # 11 ignore；01 才推
+                if (ta, tb) != (1, 1) and (ta, tb) == (0, 1):
+                    P.trainer.write_opcode(tbuf, int(trainer_opcode))
+                    write_flags(tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
+                    trainer_sent_in_window = True
+
+            pushed = 0
+            for buf, name in ready_unserved:
+                # 再确认一次仍为 READY
+                if read_flags(buf, off_a, off_b) != FLAGS_READY:
+                    continue
+                if is_hybrid:
+                    a, u0, u1 = default_action_hybrid
+                    P.player.write_hybrid_action(buf, int(a), float(u0), float(u1), clamp=True)
+                else:
+                    P.player.write_action(buf, int(default_action_base))
+
+                write_flags(buf, off_a, off_b, FLAGS_REQ)
+                rescued_names.add(name)
+                pushed += 1
+
+            last_rescue_t = now
+            last_change_t = now  # 给推进一点 grace
+
+            if log:
+                trainer_str = ""
+                if tbuf is not None:
+                    ta2, tb2 = P.trainer.read_flags(tbuf)
+                    trainer_str = f" trainer_flags=({int(ta2)},{int(tb2)})"
+                log.info(
+                    f"[rescue]{tag} stuck(mixed00/01) pushed={pushed} "
+                    f"dist={dict(dist)} pending={len(pending)}{trainer_str}"
+                )
+
+        time.sleep(float(poll))
+
 
 
 def push_through_transition_frame(

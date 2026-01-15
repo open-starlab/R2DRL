@@ -165,6 +165,7 @@ class Robocup2dEnv:
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
             log=self.log,
+            tbuf=self.tbuf,
         )
 
         tflags=P.trainer.read_flags(self.tbuf)
@@ -309,6 +310,7 @@ class Robocup2dEnv:
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
             log=self.log,
+            tbuf=self.tbuf,
         )
 
         # coach
