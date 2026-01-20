@@ -131,6 +131,8 @@ class Robocup2dEnv:
         self._obs_out = np.empty((len(self._obs_bufs), P.player.STATE_NUM), dtype=np.float32)
         self._closed = False
         self.skip_trainer = False
+        self._need_restart = False
+
 
     def get_avail_actions(self):
         if self.done == 1 and self.last_avail_actions is not None:
@@ -142,14 +144,45 @@ class Robocup2dEnv:
         self.last_avail_actions = self._avail_out
         return self._avail_out.copy()
 
+    def _restart_cycle(self, where: str) -> bool:
+        # kill + zero + clear caches + start
+        self._kill_current_procs_only(sigterm_wait=2.0)
+        self._zero_all_shm_bufs()
+
+        self.begin_cycle = -1
+        self.last_state = None
+        self.last_obs = None
+        self.last_avail_actions = None
+        self.done = 0
+        self.episode_steps = 0
+        self.skip_trainer = False
+
+        return self.start_procs(where=where)
+
     def reset(self):
         self.turn_count += 1
         print("Turn:", self.turn_count)
 
-        if not self.procs:             # 第一次（或你 teardown 过）才会进来
-            self.start_procs(where="reset")
+        max_attempts = 5
 
+        # 需要重启 或 没活进程 => 走重启流程
+        if self._need_restart or (not self._has_live_procs()):
+            self._need_restart = False
+
+            ok = False
+            for i in range(max_attempts):
+                ok = self._restart_cycle(where=f"reset/restart{i}")
+                if ok:
+                    break
+                time.sleep(1.0)
+
+            if not ok:
+                raise RuntimeError(f"Failed to restart processes after {max_attempts} attempts.")
+
+        # 最后正常 reset 握手
         self._reset_once_no_reconnect()
+
+
 
 
     def _reset_once_no_reconnect(self):
@@ -161,15 +194,6 @@ class Robocup2dEnv:
         self.done = 0
         self.begin_cycle = -1
         self.episode_steps = 0
-
-        ipc.wait_all_ready(
-            player_bufs=self.player_bufs,
-            off_a=P.player.OFFSET_FLAG_A,
-            off_b=P.player.OFFSET_FLAG_B,
-            log=self.log,
-            tbuf=self.tbuf,
-            run_id=self.run_id,
-        )
 
         tflags=P.trainer.read_flags(self.tbuf)
         if not P.trainer.wait_flags(self.tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
@@ -239,7 +263,7 @@ class Robocup2dEnv:
             log=self.log,
         )
 
-    def start_procs(self, where: str = "reset") -> None:
+    def start_procs(self, where: str = "reset") -> bool:
 
         env = dict(self.child_env)
         env["ROBOCUP2DRL_RUN_ID"] = self.run_id
@@ -308,7 +332,7 @@ class Robocup2dEnv:
         self.log.info(f"[{where}][players] launched n={len(player_procs)}")
         # time.sleep(10)
 
-        ipc.wait_all_ready(
+        need_reset =ipc.wait_all_ready(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
@@ -316,6 +340,8 @@ class Robocup2dEnv:
             tbuf=self.tbuf,
             run_id=self.run_id,
         )
+        if need_reset:
+            return False
 
         # coach
         p, _ = proc.launch_coach(
@@ -335,6 +361,7 @@ class Robocup2dEnv:
         time.sleep(0.2)
 
         print("start_procs")
+        return True
 
     def step(self, actions):
 
@@ -378,7 +405,7 @@ class Robocup2dEnv:
             ipc.write_flags(buf,P.player.OFFSET_FLAG_A,P.player.OFFSET_FLAG_B,P.common.FLAG_REQ)
 
 
-        ipc.wait_all_ready(
+        self._need_restart = ipc.wait_all_ready(
             player_bufs=self.player_bufs,
             off_a=P.player.OFFSET_FLAG_A,
             off_b=P.player.OFFSET_FLAG_B,
@@ -387,7 +414,6 @@ class Robocup2dEnv:
             run_id=self.run_id,
         )
 
-        # 4) Settlement (read coach)
 
         timeout = (self.episode_steps >= self.episode_limit)
         goal = P.coach.read_goal_flag(self.cbuf)
@@ -396,18 +422,19 @@ class Robocup2dEnv:
         reward = 0.0
         self.done = 0
 
-        if timeout:
+        if timeout or self._need_restart:
             self.done = 1
             reward = 0.0
-        elif goal==1:
-            self.done = 1
-            reward = 1.0
-        elif goal==-1:
-            self.done = 1
-            reward = -1.0
         else:
-            self.done = 0
-            reward = 0.0        
+            if goal == 1:
+                self.done = 1
+                reward = 1.0
+            elif goal == -1:
+                self.done = 1
+                reward = -1.0
+            else:
+                self.done = 0
+                reward = 0.0        
 
         info = {
             "episode_limit": float(timeout),
@@ -519,3 +546,73 @@ class Robocup2dEnv:
             P.common._safe(os.close, self._port_lock_fd)
             self._port_lock_fd = None
             self._port_lock_path = None
+
+
+    def _kill_current_procs_only(self, *, sigterm_wait: float = 2.0) -> None:
+        """Kill current run processes, but keep shm + run_id + locks."""
+        popens = []
+        for item in getattr(self, "procs", []):
+            p = P.common._as_popen(item)
+            if p is not None:
+                popens.append(p)
+
+        py_pgid = os.getpgrp()
+        run_pids, run_pgids = set(), set()
+
+        for p in popens:
+            st = P.common._safe(p.poll)
+            if st is None:
+                pid = int(p.pid)
+                run_pids.add(pid)
+                pgid = P.common._safe(os.getpgid, pid)
+                if pgid is not None and int(pgid) != py_pgid:
+                    run_pgids.add(int(pgid))
+
+        # TERM
+        P.common._safe(proc.kill_run_process_groups, signal.SIGTERM, run_pgids, run_pids, log=self.log)
+
+        t_end = time.time() + float(sigterm_wait)
+        for p in popens:
+            if p.poll() is None:
+                P.common._safe(p.wait, timeout=max(0.0, t_end - time.time()))
+
+        # KILL (force)
+        P.common._safe(proc.kill_run_process_groups, signal.SIGKILL, run_pgids, run_pids, log=self.log)
+
+        self.procs = []
+
+
+    def _zero_all_shm_bufs(self) -> None:
+        """Zero-fill all shm buffers in-place (keep shm objects and names)."""
+        # coach
+        for shm in getattr(self, "coach_shms", {}).values():
+            try:
+                buf = shm.buf
+                buf[:] = b"\x00" * len(buf)
+            except Exception:
+                pass
+
+        # trainer
+        for shm in getattr(self, "trainer_shms", {}).values():
+            try:
+                buf = shm.buf
+                buf[:] = b"\x00" * len(buf)
+            except Exception:
+                pass
+
+        # players
+        for shm in getattr(self, "player_shms", {}).values():
+            try:
+                buf = shm.buf
+                buf[:] = b"\x00" * len(buf)
+            except Exception:
+                pass
+    def _has_live_procs(self) -> bool:
+        for item in getattr(self, "procs", []):
+            p = P.common._as_popen(item)
+            if p is None:
+                continue
+            st = P.common._safe(p.poll)
+            if st is None:
+                return True
+        return False

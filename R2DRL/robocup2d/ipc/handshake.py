@@ -59,107 +59,6 @@ def wait_flags(
         )
     return False
 
-def wait_all_ready_or_done(
-    *,
-    player_bufs,          # [(buf, name), ...]
-    off_a: int,
-    off_b: int,
-    cbuf = None,            # coach shm buf；为 None 时只等 READY + 超时
-    poll: float = 0.001,
-    stall_timeout: float = 20.0,   # cbuf=None 时把它当作 ready 超时；cbuf!=None 时当作 stall 超时
-    current_cycle: int = 0,
-    log=None,
-):
-    """
-    If cbuf is None:
-      - wait until all READY, or timeout -> raise ShmProtocolError
-      - return None
-
-    If cbuf is provided:
-      - ensure cycle > current_cycle (至少前进一帧)
-      - then: GOAL first, READY second
-      - stall_timeout: coach cycle 长时间不前进 -> raise RuntimeError
-    """
-
-    if current_cycle is None:
-        current_cycle = -1
-    current_cycle = int(current_cycle)
-
-    # 0) wait until cycle > current_cycle (至少前进一帧)
-    t0 = time.monotonic()
-    while True:
-        cycle = int(P.coach.read_cycle(cbuf))
-        gm    = int(P.coach.read_gamemode(cbuf))
-        if cycle > current_cycle or gm == 9:
-            last_cycle = cycle
-            break
-        time.sleep(float(poll))
-        if time.monotonic() - t0 > float(stall_timeout):
-            msg = f"[stall] waiting for new coach cycle timed out: current_cycle={current_cycle} now_cycle={cycle}"
-            if log:
-                log.info(msg)
-            raise RuntimeError(msg)
-
-    pending = list(player_bufs)
-    last_change_t = time.monotonic()
-
-    while True:
-        progressed = False
-
-        # 1) poll players READY
-        i = 0
-        while i < len(pending):
-            buf, name = pending[i]
-            if read_flags(buf, off_a, off_b) == FLAGS_READY:
-                pending.pop(i)
-                progressed = True
-                continue
-            i += 1
-
-        # 2) read coach
-        cycle = int(P.coach.read_cycle(cbuf))
-        gm    = int(P.coach.read_gamemode(cbuf))
-        goal  = int(P.coach.read_goal_flag(cbuf))
-
-        # # priority: GOAL first
-        # if goal != 0:
-        #     return "GOAL", cycle, gm, goal
-
-        # then READY
-        if not pending:
-            return "READY", cycle, gm, goal
-
-        # stall (lowest priority)
-        now = time.monotonic()
-        if cycle != last_cycle:
-            last_cycle = cycle
-            last_change_t = now
-        elif (now - last_change_t) > float(stall_timeout):
-            # dump pending players flags
-            pending_details = []
-            pairs = []
-            for buf, name in pending:
-                a, b = read_flags(buf, off_a, off_b)
-                a, b = int(a), int(b)
-                pairs.append((a, b))
-                pending_details.append(f"{name}=({a},{b})")
-
-            dist = Counter(pairs)
-
-            msg = (
-                f"[stall] coach cycle not advancing: "
-                f"cycle={cycle} gm={gm} goal={goal} current_cycle={current_cycle} "
-                f"pending={len(pending)} dist={dict(dist)} "
-                f"details=" + ", ".join(pending_details)
-            )
-            if log:
-                log.info(msg)
-            raise RuntimeError(msg)
-
-        if not progressed:
-            time.sleep(float(poll))
-
-
 def wait_all_ready(
     *,
     player_bufs,                 # [(buf, name), ...]
@@ -204,7 +103,7 @@ def wait_all_ready(
 
     total = len(entities)
     if total == 0:
-        return
+        return True
 
     t_end = time.monotonic() + float(timeout)
 
@@ -240,7 +139,7 @@ def wait_all_ready(
         # (2) 退出条件：全员 READY(01)
         # =========================================================
         if len(ready_entities) == total:
-            return
+            return False
 
         # =========================================================
         # (3) 超时：打印 dist/ready 状态，直接抛错
@@ -254,7 +153,7 @@ def wait_all_ready(
             )
             if log:
                 log.info(msg)
-            raise ShmProtocolError(msg)
+            return True
 
         # =========================================================
         # (4) 稳态检测：dist 不变持续 stuck_window => stuck
