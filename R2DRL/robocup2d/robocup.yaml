@@ -1,7 +1,7 @@
 env: robocup
 env_args:
-  n1: 11
-  n2: 11
+  n1: 3
+  n2: 3
   team1: Base
   team2: Helios
   episode_limit: 600

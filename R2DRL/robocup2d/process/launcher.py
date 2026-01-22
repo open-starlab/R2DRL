@@ -5,7 +5,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, IO, List, Optional, Sequence, Tuple, Union
-
+import time
 LogFP = Union[int, IO[str]]
 
 @dataclass
@@ -268,7 +268,9 @@ def launch_players(
         team2 = f"{team2}_R"
 
     # team1
-    for unum in range(1, int(n1) + 1):
+    _launch_one(1, team1, 1, mode1)
+    time.sleep(0.1)  # slight delay to avoid all players starting at the exact same time
+    for unum in range(2, int(n1) + 1):
         _launch_one(1, team1, unum, mode1)
 
     # team2

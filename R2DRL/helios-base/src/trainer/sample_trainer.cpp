@@ -277,7 +277,6 @@ void SampleTrainer::exec_opcode_(std::int32_t opcode)
     }
 }
 
-
 void SampleTrainer::resetFromPython_()
 {
     if (!shm_ready_ || !shm_) {
@@ -292,51 +291,46 @@ void SampleTrainer::resetFromPython_()
         return;
     }
 
-    // 读球
     const float bx  = rdF_(T_BALL_X);
     const float by  = rdF_(T_BALL_Y);
     const float bvx = rdF_(T_BALL_VX);
     const float bvy = rdF_(T_BALL_VY);
 
-    // recover
     doRecover();
-
-    // 摆球（含速度）
     doMoveBall(Vector2D(bx, by), Vector2D(bvx, bvy));
 
+    // ✅ 按实际连接人数摆（假设 unum = 1..n 连续）
+    int nL = (int)world().playersLeft().size();
+    int nR = (int)world().playersRight().size();
+    nL = std::max(0, std::min(N_LEFT,  nL));
+    nR = std::max(0, std::min(N_RIGHT, nR));
+
     // 左队
-    for (int i = 0; i < N_LEFT; ++i) {
+    for (int unum = 1; unum <= nL; ++unum) {
+        int i = unum - 1;
         const float px  = rdF_(T_LPX(i));
         const float py  = rdF_(T_LPY(i));
         const float dir = rdF_(T_LPD(i));
-        const int unum = i + 1;
-
-        doMovePlayer(left_name, unum,
-                     Vector2D(px, py),
-                     AngleDeg(dir));
+        doMovePlayer(left_name, unum, Vector2D(px, py), AngleDeg(dir));
     }
 
     // 右队
-    for (int i = 0; i < N_RIGHT; ++i) {
+    for (int unum = 1; unum <= nR; ++unum) {
+        int i = unum - 1;
         const float px  = rdF_(T_RPX(i));
         const float py  = rdF_(T_RPY(i));
         const float dir = rdF_(T_RPD(i));
-        const int unum = i + 1;
-
-        doMovePlayer(right_name, unum,
-                     Vector2D(px, py),
-                     AngleDeg(dir));
+        doMovePlayer(right_name, unum, Vector2D(px, py), AngleDeg(dir));
     }
 
-    // ✅ 切 PlayOn（摆完马上开球）
     doChangeMode(PM_PlayOn);
-
-    // ✅ 清 opcode，防止重复执行
     wr32_(T_OPCODE, OP_NOP);
 
     std::cerr << "[trainer][resetFromPy] done. "
-              << "ball=(" << bx << "," << by << "," << bvx << "," << bvy << ")\n";
+              << "nL=" << nL << " nR=" << nR
+              << " ball=(" << bx << "," << by << "," << bvx << "," << bvy << ")\n";
 }
+
 
 
 
