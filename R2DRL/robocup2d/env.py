@@ -380,8 +380,6 @@ class Robocup2dEnv:
             if actions.shape[0] != self.n1:
                 raise RuntimeError(f"Base expects {self.n1} actions, received {actions.shape[0]}")
 
-        current_coach_cycle = int(P.coach.read_cycle(self.cbuf))
-
         #trainer
         if self.skip_trainer is False:
             tflags=P.trainer.read_flags(self.tbuf)
@@ -443,7 +441,7 @@ class Robocup2dEnv:
             "cycle": int(cycle),
             "gamemode": int(gm),
         }
-        # print("done:", self.done, " reward:", reward, " info:", info,"turn_cycle:", self.episode_steps, "gm:", gm, "goal:", goal)
+        print("done:", self.done, " reward:", reward, " info:", info,"turn_cycle:", self.episode_steps, "gm:", gm, "goal:", goal)
         return float(reward), bool(self.done), info
 
     def get_obs(self):
@@ -453,11 +451,12 @@ class Robocup2dEnv:
         for i, buf in enumerate(self._obs_bufs):
             self._obs_out[i, :] = P.player.read_obs_norm(
                 buf=buf,
-                field_length=self.half_length,
-                field_width=self.half_width,
+                half_field_length=self.half_length,
+                half_field_width=self.half_width,
             )
 
         self.last_obs = self._obs_out
+        print("get_obs:", self.last_obs)
         return self._obs_out.copy()
 
 
@@ -471,11 +470,11 @@ class Robocup2dEnv:
 
         state = P.coach.read_state_norm(
             buf=self.cbuf,
-            field_length=self.half_length,
-            field_width=self.half_width,
-            copy=True,
+            half_field_length=self.half_length,
+            half_field_width=self.half_width,
         )
         self.last_state = state
+        print("get_state:", state)
         return state
 
     def __del__(self):

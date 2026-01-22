@@ -145,69 +145,60 @@ def write_hybrid_action(
 
 
 # robocup2d/protocols/player_shm.py
-
 def read_obs_norm(
-    buf: Buf,
+    buf,
     *,
-    field_length: float,   # HALF_LENGTH=52.5
-    field_width: float,    # HALF_WIDTH =34.0
-    player_vmax: float = 1.2,   # 经验默认：player_speed_max 常见约 1.2（不准就自己改成 ServerParam 读到的值）
-    ball_vmax: float = 2.7,     # 经验默认：ball_speed_max 常见约 2.7
-    stamina_max: float = 4000.0,# 经验默认：stamina_max 常见约 4000
+    half_field_length: float,   # e.g. 52.5
+    half_field_width: float,    # e.g. 34.0
+    stamina_max: float = 8000.0,
     copy: bool = True,
-    clip: bool = True,
 ) -> np.ndarray:
     """
-    Normalize your 97-dim obs produced by SamplePlayer::getAllState().
+    Normalize 97-dim obs from SamplePlayer::getAllState().
 
-    - positions: x/field_length, y/field_width
-    - velocities: /player_vmax (players), /ball_vmax (ball)
-    - stamina: /stamina_max
-    - flags kept as {0,1}
-    - gamemode kept raw (float int)
+    Layout (as your comment implies):
+      self: [0:6]   -> x,y,vx,vy,stamina,kickable
+      ball: [6:10]  -> x,y,vx,vy
+      opp:  [10:54] -> 11x4 (x,y,vx,vy)
+      mate: [54:94] -> 10x4 (x,y,vx,vy)
+      rest: [94:97] -> flags/gamemode etc (kept raw)
     """
-    # 注意：归一化最好别对 shm view in-place，所以这里强制拿 copy 来改
-    o = read_obs(buf, copy=True).astype(np.float32, copy=False)
+    # hard-coded from your server config
+    PLAYER_VMAX = 1.05
+    BALL_VMAX   = 3.0
 
-    L = float(field_length)
-    W = float(field_width)
-    pv = float(player_vmax)
-    bv = float(ball_vmax)
-    sm = float(stamina_max) if stamina_max else 1.0
+    o = read_obs(buf, copy=copy).astype(np.float32, copy=False)
+
+    HL = float(half_field_length)
+    HW = float(half_field_width)
+    sm = float(stamina_max) 
 
     # --- self ---
-    o[0] /= L
-    o[1] /= W
-    o[2] /= pv
-    o[3] /= pv
-    o[4] /= sm
+    o[0] /= HL          # x
+    o[1] /= HW          # y
+    o[2] /= PLAYER_VMAX # vx
+    o[3] /= PLAYER_VMAX # vy
+    o[4] /= sm          # stamina
     # o[5] kickable keep
 
     # --- ball ---
-    o[6] /= L
-    o[7] /= W
-    o[8] /= bv
-    o[9] /= bv
+    o[6] /= HL          # x
+    o[7] /= HW          # y
+    o[8] /= BALL_VMAX   # vx
+    o[9] /= BALL_VMAX   # vy
 
     # --- opponents 11x4: [x,y,vx,vy] ---
     opp = o[10:54].reshape(11, 4)
-    opp[:, 0] /= L
-    opp[:, 1] /= W
-    opp[:, 2] /= pv
-    opp[:, 3] /= pv
+    opp[:, 0] /= HL
+    opp[:, 1] /= HW
+    opp[:, 2] /= PLAYER_VMAX
+    opp[:, 3] /= PLAYER_VMAX
 
     # --- mates 10x4: [x,y,vx,vy] ---
     mate = o[54:94].reshape(10, 4)
-    mate[:, 0] /= L
-    mate[:, 1] /= W
-    mate[:, 2] /= pv
-    mate[:, 3] /= pv
-
-    if clip:
-        # 位置/速度/体力做个裁剪，避免偶发异常值把网络炸掉
-        o[0:4] = np.clip(o[0:4], -1.0, 1.0)
-        o[4]   = np.clip(o[4],  0.0, 1.0)
-        o[6:10]= np.clip(o[6:10], -1.0, 1.0)
-        o[10:94] = np.clip(o[10:94], -1.0, 1.0)
+    mate[:, 0] /= HL
+    mate[:, 1] /= HW
+    mate[:, 2] /= PLAYER_VMAX
+    mate[:, 3] /= PLAYER_VMAX
 
     return o

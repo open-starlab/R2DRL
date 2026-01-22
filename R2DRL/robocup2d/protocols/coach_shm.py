@@ -77,44 +77,37 @@ def read_snapshot(buf: Buf) -> Tuple[int, np.ndarray, np.ndarray, int]:
     return cycle, ball, players, gm
 
 def read_state_norm(
-    buf: Buf,
+    buf,
     *,
-    field_length: float,
-    field_width: float,
-    copy: bool = True,
+    half_field_length: float,
+    half_field_width: float,
 ) -> np.ndarray:
-    """
-    Returns normalized float32[136] in a stable range:
-      ball: (x,y,vx,vy) -> [-1,1]
-      players: (x,y,vx,vy,dir_deg,team_id) with:
-        x,y,v -> [-1,1], dir_deg -> [-1,1], team_id -> {-1,+1} (heuristic mapping)
-    """
-    s = read_state_floats(buf, copy=False)  # view
+    """Normalized state float32[136] from coach shm (vmax hard-coded)."""
+    # hard-coded from your server config
+    PLAYER_VMAX = 1.05
+    BALL_VMAX   = 3.0
 
-    hl = float(field_length) * 0.5
-    hw = float(field_width) * 0.5
-    vp = 1.0
-    vb = 1.0
+    s = read_state_floats(buf, copy=False)  # view (float32[136])
+    hl = float(half_field_length)
+    hw = float(half_field_width)
 
-    out = s.copy() if copy else s  # if copy=False, you accept modifying underlying view (usually don't)
-    if not copy:
-        # 强烈建议 copy=True；这里防止误用
-        out = s.copy()
+    out = s.copy().astype(np.float32, copy=False)
 
-    # ball
-    out[0] = np.clip(out[0] / hl, -1.0, 1.0)
-    out[1] = np.clip(out[1] / hw, -1.0, 1.0)
-    out[2] = np.clip(out[2] / vb, -1.0, 1.0)
-    out[3] = np.clip(out[3] / vb, -1.0, 1.0)
+    # --- ball ---
+    out[0] /= hl
+    out[1] /= hw
+    out[2] /= BALL_VMAX
+    out[3] /= BALL_VMAX
 
-    # players view
+    # --- players ---
     p = out[4:].reshape(22, 6)
-    p[:, 0] = np.clip(p[:, 0] / hl, -1.0, 1.0)
-    p[:, 1] = np.clip(p[:, 1] / hw, -1.0, 1.0)
-    p[:, 2] = np.clip(p[:, 2] / vp, -1.0, 1.0)
-    p[:, 3] = np.clip(p[:, 3] / vp, -1.0, 1.0)
+    p[:, 0] /= hl
+    p[:, 1] /= hw
+    p[:, 2] /= PLAYER_VMAX
+    p[:, 3] /= PLAYER_VMAX
     p[:, 4] = np.clip(p[:, 4], -180.0, 180.0) / 180.0
 
+    # --- team_id -> {-1,+1} ---
     tid = p[:, 5].copy()
     if np.all((tid == 0) | (tid == 1)):
         p[:, 5] = tid * 2.0 - 1.0
@@ -123,7 +116,7 @@ def read_state_norm(
     else:
         p[:, 5] = np.clip(tid, -1.0, 1.0)
 
-    return out.astype(np.float32, copy=False)
+    return out
 
 def read_goal_flag(buf: Buf) -> int:
     """+1=左队进球; -1=右队进球; 0=无/已清零"""
