@@ -1,0 +1,205 @@
+******************************************************************
+ librcsc 2024
+ Copyright 2000 - 2007. Hidehisa Akiyama.
+ Copyright 2007 - 2011. Hidehisa Akiyama and Hiroki Shimora
+ Copyright 2011 -  Hidehisa Akiyama, Hiroki Shimora
+   Takuya Fukushima (2019-)
+ All rights reserved.
+******************************************************************
+[SampleCoach] Using shared memory: /coach_global_state
+[Coach] initImpl() begin
+[Coach] Using shared memory: /coach_global_state
+[Coach] Server host/port (from config): localhost:6002
+[Coach] Team name (from config): Base
+*****************************************************************
+ This program is based on agent2d created by Hidehisa Akiyama.
+ Copyright 2006 - 2011. Hidehisa Akiyama and Hiroki Shimora.
+ All rights reserved.
+*****************************************************************
+Base coach: [-1, 0] recv (ok eye on)
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=0
+[Coach] actionImpl cycle=50
+Base coach: [51, 0] determined opponent 10 type = 9
+[Coach] actionImpl cycle=100
+Killed. Exiting...
+Base coach: finished.
