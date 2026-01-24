@@ -108,29 +108,62 @@ Follow the instructions in the helios-base README to compile.
 
 The Python environment provides the reinforcement learning interface.
 
-#### 6.1 Copy Python Environment Files
-
-Copy the `R2DRL/robocup2d` directory to your preferred location:
-
-```bash
-cp -r R2DRL/robocup2d /path/to/your/workspace/
-```
-
-#### 6.2 Configure Paths
+#### 6.1 Configure Paths
 
 Before running, you must update the configuration file with your actual system paths:
 
-1. Open `R2DRL/robocup2d/robocup.yaml`
-2. Update the following fields:
-   - `player_dir`
-   - `player_exe`
-   - `coach_dir`
-   - `coach_exe`
-   - `server_path`
-   - `trainer_dir`
-   - `trainer_exe`
-   - `config_dir`
-   - `player_config`
+1. Copy and rename `R2DRL/robocup2d/robocup.yaml` to your desired location.
+2. Update the following fields with the correct paths to your installations. For example:
+
+```yaml
+player_dir: "<PROJECT_ROOT>/helios-base/src/player"
+player_exe: "./sample_player"
+coach_dir:  "<PROJECT_ROOT>/helios-base/src/coach"
+coach_exe:  "./sample_coach"
+server_path: "<PROJECT_ROOT>/rcssserver/build/rcssserver"
+trainer_dir: "<PROJECT_ROOT>/helios-base/src/trainer"
+trainer_exe: "./sample_trainer"
+config_dir: "<PROJECT_ROOT>/helios-base/src/formations-dt"
+player_config: "<PROJECT_ROOT>/helios-base/src/player.conf"
+
+lib_paths:
+    - <PROJECT_ROOT>/librcsc/rcsc/.libs
+```
+
+#### 6.2 Install the R2DRL Python Package
+
+Navigate to the R2DRL Python package directory and install it in editable mode:
+
+```bash
+cd R2DRL/R2DRL/robocup2d
+pip install -e .
+```
+
+### 7. Running Your First Training Session
+You can now create a training script or use the provided examples to start training your RL agents. Here's a simple example to get you started:
+
+```python
+import numpy as np
+from robocup2d import Robocup2dEnv
+
+env = Robocup2dEnv("/path/to/your/robocup.yaml")
+env.reset()
+
+n_agents = 11
+done = False
+step_count = 0
+
+while not done:
+    obs = env.get_obs()
+    state = env.get_state()
+    avail_actions = env.get_avail_actions()
+    
+    actions = np.random.randint(0, 17, size=n_agents)
+    reward, done, info = env.step(actions)
+    step_count += 1
+
+env.close()
+```
 
 ## Acknowledgments
 
