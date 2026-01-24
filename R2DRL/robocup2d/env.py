@@ -129,7 +129,10 @@ class Robocup2dEnv:
         self.cbuf = self.coach_shms[self.coach_name].buf
         self.tbuf = self.trainer_shms[self.trainer_name].buf
         self._obs_bufs = [buf_mv for (buf_mv, _tag) in self.player_bufs]
-        self._obs_out = np.empty((len(self._obs_bufs), P.player.STATE_NUM), dtype=np.float32)
+        
+        # Calc obs dim: Self(6)+Ball(4)+Opp(n2*4)+Mate((n1-1)*4)+Rest(3)
+        self.obs_dim = 13 + 4 * (self.n1 + self.n2 - 1)
+        self._obs_out = np.empty((len(self._obs_bufs), self.obs_dim), dtype=np.float32)
         self._closed = False
         self.skip_trainer = False
         self._need_restart = False
@@ -467,6 +470,8 @@ class Robocup2dEnv:
                 buf=buf,
                 half_field_length=self.half_length,
                 half_field_width=self.half_width,
+                n_opp=self.n2,
+                n_mate=self.n1 - 1,
             )
 
         self.last_obs = self._obs_out
@@ -486,6 +491,8 @@ class Robocup2dEnv:
             buf=self.cbuf,
             half_field_length=self.half_length,
             half_field_width=self.half_width,
+            n_team1=self.n1,
+            n_team2=self.n2,
         )
         self.last_state = state
         
@@ -499,12 +506,13 @@ class Robocup2dEnv:
             pass
 
     def get_env_info(self):
-
+        # Calc state dim: Ball(4)+T1(n1*6)+T2(n2*6)
+        state_dim = 4 + 6 * (self.n1 + self.n2)
         return {
             "n_agents": int(self.n1),                 # Only control the number of players in team1
             "n_actions": int(self.n_actions),
-            "state_shape": int(P.coach.COACH_STATE_FLOAT),  # 136
-            "obs_shape": int(P.player.STATE_NUM),           # 97
+            "state_shape": int(state_dim),
+            "obs_shape": int(self.obs_dim),
             "episode_limit": int(self.episode_limit),
         }
     

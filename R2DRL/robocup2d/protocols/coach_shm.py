@@ -81,6 +81,8 @@ def read_state_norm(
     *,
     half_field_length: float,
     half_field_width: float,
+    n_team1: int = 11,
+    n_team2: int = 11,
 ) -> np.ndarray:
     """Normalized state float32[136] from coach shm (vmax hard-coded)."""
     # hard-coded from your server config
@@ -116,7 +118,21 @@ def read_state_norm(
     else:
         p[:, 5] = np.clip(tid, -1.0, 1.0)
 
-    return out
+    # --- Slice and Concat ---
+    # ball(4) + team1(n_team1*6) + team2(n_team2*6)
+    # Team1 is at indices 0..n_team1-1 (in p)
+    # Team2 is at indices 11..11+n_team2-1 (in p)
+    
+    # In flat 'out':
+    # ball: 0..4
+    # team1: 4 .. 4 + n_team1*6
+    # team2: 4 + 66 .. 4 + 66 + n_team2*6
+    
+    return np.concatenate([
+        out[0:4],
+        out[4 : 4 + n_team1*6],
+        out[70 : 70 + n_team2*6]
+    ])
 
 def read_goal_flag(buf: Buf) -> int:
     """+1=左队进球; -1=右队进球; 0=无/已清零"""

@@ -148,9 +148,11 @@ def write_hybrid_action(
 def read_obs_norm(
     buf,
     *,
-    half_field_length: float,   # e.g. 52.5
-    half_field_width: float,    # e.g. 34.0
+    half_field_length: float,
+    half_field_width: float,
     stamina_max: float = 8000.0,
+    n_opp: int = 11,
+    n_mate: int = 10,
     copy: bool = True,
 ) -> np.ndarray:
     """
@@ -201,4 +203,11 @@ def read_obs_norm(
     mate[:, 2] /= PLAYER_VMAX
     mate[:, 3] /= PLAYER_VMAX
 
-    return o
+    # --- Slice and Concat ---
+    # self(6) + ball(4) + opp(n_opp*4) + mate(n_mate*4) + rest(3)
+    return np.concatenate([
+        o[0:10],
+        o[10 : 10 + n_opp*4],
+        o[54 : 54 + n_mate*4],
+        o[94:97]
+    ])

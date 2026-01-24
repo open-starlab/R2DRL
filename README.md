@@ -196,6 +196,19 @@ def write_fixed_reset(buf):
     )
 ```
 
+Feel free to customize the initial formation layout to suit your preference.
+
+#### 6.4 Optional: Adjusting Team Size
+
+The environment defaults to a standard 11v11 match, but supports flexible team sizes (e.g., 3v3).
+You can configure the number of players for each team by modifying the `n1` and `n2` parameters in `robocup.yaml`. For example, for a 3v3 match:
+
+```yaml
+env_args:
+  n1: 3
+  n2: 3
+```
+
 ### 7. Running Your First Training Session
 You can now create a training script or use the provided examples to start training your RL agents. Here's a simple example to get you started:
 
@@ -206,7 +219,7 @@ from robocup2d import Robocup2dEnv
 env = Robocup2dEnv("/path/to/your/robocup.yaml")
 env.reset()
 
-n_agents = 11
+n_agents = env.n1
 done = False
 step_count = 0
 
