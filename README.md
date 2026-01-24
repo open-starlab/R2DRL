@@ -139,6 +139,63 @@ cd R2DRL/R2DRL/robocup2d
 pip install -e .
 ```
 
+#### 6.3 Use Standard Kickoff Formation
+
+In `R2DRL/robocup2d/protocols/trainer_shm.py`, replace the existing `write_fixed_reset` block:
+
+```python
+def write_fixed_reset(buf):
+    write_reset_payload(
+        buf,
+        ball=BALL_201,
+        left_players=LEFT_FIXED_201,
+        right_players=RIGHT_FIXED_201,
+        opcode=OP_RESET_FROM_PY,
+    )
+```
+with the following kickoff layout:
+
+```python
+KICKOFF_BALL: Final[Tuple[float, float, float, float]] = (0.0, 0.0, 0.0, 0.0)
+
+LEFT_KICKOFF_STANDARD: Final[Sequence[Tuple[float, float, float]]] = [
+    (-50.0,   0.0,   0.0),   # 1 GK
+    (-38.0, -22.0,   0.0),   # 2 LB
+    (-38.0,  22.0,   0.0),   # 3 RB
+    (-38.0,  -8.0,   0.0),   # 4 LCB
+    (-38.0,   8.0,   0.0),   # 5 RCB
+    (-28.0,   0.0,   0.0),   # 6 DM (defensive mid)
+    (-25.0, -15.0,   0.0),   # 7 LCM
+    (-25.0,  15.0,   0.0),   # 8 RCM
+    (-10.5,  -8.0,   0.0),   # 9 LW (high press)
+    (-10.5,   8.0,   0.0),   # 10 RW (high press)
+    ( -9.5,   0.0,   0.0),   # 11 CF (9.15m rule compliance)
+]
+
+RIGHT_KICKOFF_STANDARD: Final[Sequence[Tuple[float, float, float]]] = [
+    ( 50.0,   0.0, 180.0),   # 1 GK
+    ( 38.0,  22.0, 180.0),   # 2 RB
+    ( 38.0, -22.0, 180.0),   # 3 LB
+    ( 38.0,   8.0, 180.0),   # 4 RCB
+    ( 38.0,  -8.0, 180.0),   # 5 LCB
+    ( 28.0,   0.0, 180.0),   # 6 DM (defensive mid)
+    ( 25.0,  15.0, 180.0),   # 7 RCM
+    ( 25.0, -15.0, 180.0),   # 8 LCM
+    ( 10.5,   8.0, 180.0),   # 9 RW (high press)
+    ( 10.5,  -8.0, 180.0),   # 10 LW (high press)
+    (  9.5,   0.0, 180.0),   # 11 CF (9.15m rule compliance)
+]
+
+def write_fixed_reset(buf):
+    write_reset_payload(
+        buf,
+        ball=KICKOFF_BALL,
+        left_players=LEFT_KICKOFF_STANDARD,
+        right_players=RIGHT_KICKOFF_STANDARD,
+        opcode=OP_RESET_FROM_PY,
+    )
+```
+
 ### 7. Running Your First Training Session
 You can now create a training script or use the provided examples to start training your RL agents. Here's a simple example to get you started:
 
