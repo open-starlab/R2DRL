@@ -235,6 +235,22 @@ while not done:
 env.close()
 ```
 
+### 8. Troubleshooting
+
+Sometimes the environment processes might not terminate correctly. You can use the following commands to check for and kill lingering processes.
+
+Check for lingering processes:
+
+```bash
+ps -ef | grep -E "rcssserver|sample_player|sample_coach|sample_trainer"
+```
+
+Kill lingering processes (Force):
+
+```bash
+killall -9 rcssserver sample_player sample_coach sample_trainer
+```
+
 ## Acknowledgments
 
 This project builds upon:
