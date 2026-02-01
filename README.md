@@ -4,6 +4,7 @@
 ## Overview
 
 R2DRL is a reinforcement learning framework for RoboCup 2D Soccer Simulation. This guide will walk you through the complete setup process, from installing dependencies to running your first training session.
+![Architecture](Architecture.jpg)
 
 ## Quick Start Guide
 
