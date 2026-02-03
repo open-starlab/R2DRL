@@ -192,9 +192,9 @@ RIGHT_FIXED = [  # (x, y, body_deg)  # vx,vy = 0
 def write_fixed_reset(buf):
     write_reset_payload(
         buf,
-        ball=KICKOFF_BALL,
-        left_players=LEFT_KICKOFF_STANDARD,
-        right_players=RIGHT_KICKOFF_STANDARD,
+        ball=BALL,
+        left_players=LEFT_FIXED,
+        right_players=RIGHT_FIXED,
         opcode=OP_RESET_FROM_PY,
     )
 ```
