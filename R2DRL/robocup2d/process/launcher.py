@@ -128,6 +128,8 @@ def launch_server(
         # 关掉 player type 导致的 effort 差异
         "--player::effort_max_delta_factor=0",
         "--player::effort_min_delta_factor=0",
+        "--player::player_types=1",
+        "--player::pt_max=1",
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))
