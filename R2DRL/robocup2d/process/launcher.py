@@ -94,8 +94,8 @@ def launch_server(
     args = [
         server_path,
         f"--server::port={int(server_port)}",
-        f"--server::coach_port={int(trainer_port)}",     # offline coach port
-        f"--server::olcoach_port={int(coach_port)}",     # online coach port
+        f"--server::coach_port={int(trainer_port)}",
+        f"--server::olcoach_port={int(coach_port)}",
         "--server::coach=true",
         "--server::coach_w_referee=true",
         "--server::auto_mode=true",
@@ -108,6 +108,26 @@ def launch_server(
         f"--server::game_log_dir={rcg_dir}",
         f"--server::text_log_dir={rcg_dir}",
         "--server::text_logging=false",
+
+        # stamina 不影响
+        "--server::stamina_capacity=-1",
+        "--server::stamina_max=1e9",
+        "--server::stamina_inc_max=1e6",
+
+        # recovery 固定
+        "--server::recover_init=1.0",
+        "--server::recover_min=1.0",
+        "--server::recover_dec=0",
+
+        # effort 固定
+        "--server::effort_init=1.0",
+        "--server::effort_min=1.0",
+        "--server::effort_dec=0",
+        "--server::effort_inc=0",
+
+        # 关掉 player type 导致的 effort 差异
+        "--player::effort_max_delta_factor=0",
+        "--player::effort_min_delta_factor=0",
     ]
     if extra_args:
         args.extend(list(map(str, extra_args)))
