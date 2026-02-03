@@ -44,7 +44,6 @@ class Robocup2dEnv:
             raise ValueError(f"Unknown team='{self.team1}', cannot infer action mode")
         
         self.team2 = self.args["team2"]
-        self.set_initial_positions = self.args["set_initial_positions"]
         self.episode_limit = int(self.args["episode_limit"])
         self.goal_x = float(self.args["goal_x"])
         self.goal_y = float(self.args["goal_y"])
@@ -209,10 +208,8 @@ class Robocup2dEnv:
         if not P.trainer.wait_flags(self.tbuf, P.common.FLAG_READY, timeout_ms=self.trainer_ready_timeout_ms, poll_us=500):
             raise P.common.ShmProtocolError(f"[trainer] not READY before submit, flags={tflags}")
         P.trainer.write_fixed_reset(self.tbuf)
-        if self.set_initial_positions:
-            P.trainer.write_opcode(self.tbuf, 10)
-        else:
-            P.trainer.write_opcode(self.tbuf, 8)
+        P.trainer.write_opcode(self.tbuf, 10)
+
         ipc.write_flags(self.tbuf, P.trainer.T_FLAG_A, P.trainer.T_FLAG_B, P.common.FLAG_REQ)
         self.skip_trainer = True
 
