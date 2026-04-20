@@ -5,7 +5,18 @@ from collections import deque
 import os
 
 class CurriculumController:
-    def __init__(self, init_n=1, start_window_size=1, return_window_size=5):
+    def __init__(
+        self,
+        init_n=1,
+        start_window_size=1,
+        return_window_size=5,
+        progress_bucket_count=100,
+        current_target_window_size=3,
+        window_move_win_rate_threshold=1.5,
+        new_key_probability=None,
+        num_selected_trajectories=10,
+        random_sample=False,
+    ):
 
         self.current_n = init_n
 
@@ -16,6 +27,12 @@ class CurriculumController:
         # 统计最近 return 的滑动窗口长度（只针对当前 frontier）
         self.return_window_size = int(return_window_size)
         self.n_players = 0
+        self.num_selected_trajectories = (
+            None if num_selected_trajectories is None else int(num_selected_trajectories)
+        )
+        self.random_sample = (
+            False if random_sample is None else bool(random_sample)
+        )
         base_dir = os.path.dirname(os.path.abspath(__file__))
         traj_path = os.path.join(base_dir, "trajectories", "3v3trajectories.npz")
         self.trajectories, self.traj_progress = self.load_trajectory_array(traj_path)
@@ -34,152 +51,65 @@ class CurriculumController:
 
         self.num_traj = len(self.trajectories)
 
-        # 当前仍可用于课程/old采样的轨迹（traj_progress > 0）
-        self.active_traj_ids = set(np.where(self.traj_progress > 0)[0].astype(int).tolist())
+        self.progress_bucket_count = int(progress_bucket_count)
+        self.current_target_window_size = int(current_target_window_size)
+        self.current_target_window_start = 0
+        self.window_move_win_rate_threshold = float(window_move_win_rate_threshold)
+        if new_key_probability is None:
+            raise ValueError("new_key_probability must be provided")
+        self.new_key_probability = float(new_key_probability)
 
-        # ============================================================
-        # 只维护“每条轨迹当前 frontier”的统计
-        # ============================================================
-        self.frontier_returns_by_traj = [
-            deque(maxlen=self.return_window_size) for _ in range(self.num_traj)
-        ]
-        self.frontier_visits_by_traj = np.zeros(self.num_traj, dtype=np.int32)
-        self.frontier_mean_return_by_traj = np.zeros(self.num_traj, dtype=np.float32)
-        self.frontier_level_by_traj = ["buffer" for _ in range(self.num_traj)]
+        self.window_recent_returns = deque()
+        self.window_recent_win_count = 0
+        self.window_recent_loss_count = 0
+        self.window_move_count = 0
 
-        # 当前 frontier 的分类计数
-        self.frontier_counts = {
-            "buffer": 0,
-            "lose": 0,
-            "mixed": 0,
-            "draw": 0,
-            "win": 0,
-            "easy": 0,
-        }
-
-        # 当前 frontier 按 level 分组的轨迹集合
-        self.frontier_trajs_by_level = {
-            "buffer": set(),
-            "lose": set(),
-            "mixed": set(),
-            "draw": set(),
-            "win": set(),
-            "easy": set(),
-        }
+        self.bucket_ranges = [[] for _ in range(self.progress_bucket_count)]
+        self.current_window_candidates = []
+        self.old_window_candidates = []
 
         self.advance_check_interval = 5000
         self.advance_threshold = 5
         self.period_update_count = 0
         self.period_advanced_count = 0
 
-        self._rebuild_frontier_stats()
+        selected_msg = (
+            str(self.num_selected_trajectories)
+            if self.num_selected_trajectories is not None
+            else "ALL"
+        )
+        print(f"[Curriculum] num_selected_trajectories={selected_msg}")
+        print(f"[Curriculum] random_sample={int(self.random_sample)}")
+        print(f"[Curriculum] new_key_probability={self.new_key_probability}")
+
+        self._rebuild_progress_buckets()
+        self._refresh_sampling_cache()
 
     def generate_new_key(self):
-        """
-        当前 frontier 采样逻辑：
-        1. 如果还有 buffer，优先只从 buffer 里抽
-        2. 如果没有 buffer：
-        - 若 win 数量 < 20，就对所有轨迹均匀抽样
-        - 否则按默认固定权重采样
-        3. easy 不参与 new key 采样
-        """
+        """从当前百分比窗口内均匀采样一个 start key。"""
         if len(self.trajectories) == 0:
             raise ValueError("no trajectories loaded")
 
-        if self.frontier_trajs_by_level["buffer"]:
-            traj_id = min(self.frontier_trajs_by_level["buffer"])
-            frame_idx = int(self.traj_progress[traj_id])
-            return (traj_id, frame_idx, self.current_n)
-
-        level_to_trajs = {
-            "win": list(self.frontier_trajs_by_level["win"]),
-            "draw": list(self.frontier_trajs_by_level["draw"]),
-            "mixed": list(self.frontier_trajs_by_level["mixed"]),
-            "lose": list(self.frontier_trajs_by_level["lose"]),
-        }
-
-        win_count = len(level_to_trajs["win"])
-
-        all_candidate_trajs = (
-            level_to_trajs["win"]
-            + level_to_trajs["draw"]
-            + level_to_trajs["mixed"]
-            + level_to_trajs["lose"]
-        )
-
-        if not all_candidate_trajs:
-            return None
-
-        # win 太少时：对所有轨迹均匀抽样
-        if win_count < 20:
-            traj_id = int(random.choice(all_candidate_trajs))
-            frame_idx = int(self.traj_progress[traj_id])
-            return (traj_id, frame_idx, self.current_n)
-
-        # 否则：按默认固定权重采样
-        base_weights = {
-            "win": 0.4,
-            "mixed": 0.3,
-            "draw": 0.2,
-            "lose": 0.1,
-        }
-
-        candidate_levels = []
-        candidate_weights = []
-        for lvl in ["win", "draw", "mixed", "lose"]:
-            if level_to_trajs[lvl]:
-                candidate_levels.append(lvl)
-                candidate_weights.append(base_weights[lvl])
-
-        if not candidate_levels:
-            return None
-
-        weight_sum = sum(candidate_weights)
-        if weight_sum <= 0:
-            traj_id = int(random.choice(all_candidate_trajs))
-            frame_idx = int(self.traj_progress[traj_id])
-            return (traj_id, frame_idx, self.current_n)
-
-        candidate_weights = [w / weight_sum for w in candidate_weights]
-        chosen_level = random.choices(candidate_levels, weights=candidate_weights, k=1)[0]
-
-        traj_id = int(random.choice(level_to_trajs[chosen_level]))
-        frame_idx = int(self.traj_progress[traj_id])
-        return (traj_id, frame_idx, self.current_n)
+        return self._sample_key_from_candidates(self.current_window_candidates)
 
     def generate_old_key(self):
         """
-        先随机选一条当前进度 > 0 的轨迹，
-        再从该轨迹区间 [当前进度, 起始最大帧] 中随机抽一个 frame，
-        生成 old key。
+        从当前窗口之前的更容易 bucket 里随机采样 old key。
         """
         if len(self.trajectories) == 0:
             raise ValueError("no trajectories loaded")
 
-        if not self.active_traj_ids:
+        if self.current_target_window_start <= 0:
             return None
 
-        traj_id = int(random.choice(tuple(self.active_traj_ids)))
+        return self._sample_key_from_candidates(self.old_window_candidates)
 
-        curr_frame = int(self.traj_progress[traj_id])
-        max_frame = int(self.traj_max_frame[traj_id])
-
-        frame_idx = random.randint(curr_frame, max_frame)
-
-        return (traj_id, frame_idx, self.current_n)
-
-    def generate_key(self, p_new=0.8):
+    def generate_key(self, p_new=None):
         """
-        按给定概率混合采样，但如果当前还有 buffer，
-        则优先直接返回 buffer 对应的 new key。
-
-        逻辑：
-        1. 如果 frontier 里还有 buffer，直接走 generate_new_key()
-        2. 否则再按 p_new 决定走 new / old
+        按给定概率混合采样当前窗口和历史更容易窗口。
         """
-        if self.frontier_trajs_by_level["buffer"]:
-            return self.generate_new_key()
-
+        if p_new is None:
+            p_new = self.new_key_probability
         use_new = (random.random() < p_new)
 
         if use_new:
@@ -194,101 +124,136 @@ class CurriculumController:
             return self.generate_new_key()
 
     # ============================================================
-    # frontier statistics / classification
+    # progress bucket / window curriculum
     # ============================================================
-    def _reset_frontier_stats_for_traj(self, traj_id: int):
-        """
-        某条轨迹出现新的 frontier 时，将其 frontier 统计重置为初始状态。
-        """
-        self.frontier_returns_by_traj[traj_id].clear()
-        self.frontier_visits_by_traj[traj_id] = 0
-        self.frontier_mean_return_by_traj[traj_id] = 0.0
-        self._set_frontier_level(traj_id, "buffer")
+    def _max_window_start(self):
+        return max(0, self.progress_bucket_count - self.current_target_window_size)
 
-    def _rebuild_frontier_stats(self):
-        """
-        全量重建当前 frontier 的分类缓存。
-        只在初始化和 advance_n 后调用。
-        """
-        self.frontier_counts = {
-            "buffer": 0,
-            "lose": 0,
-            "mixed": 0,
-            "draw": 0,
-            "win": 0,
-            "easy": 0,
-        }
-        self.frontier_trajs_by_level = {
-            "buffer": set(),
-            "lose": set(),
-            "mixed": set(),
-            "draw": set(),
-            "win": set(),
-            "easy": set(),
-        }
+    def _safe_win_loss_ratio(self, win_count: int, loss_count: int) -> float:
+        if win_count <= 0:
+            return 0.0
+        if loss_count <= 0:
+            return 0.0
+        return float(win_count) / float(loss_count)
 
-        for traj_id in range(self.num_traj):
-            # 每次重建时，所有 frontier 统计都从初始 buffer 状态开始
-            self.frontier_returns_by_traj[traj_id].clear()
-            self.frontier_visits_by_traj[traj_id] = 0
-            self.frontier_mean_return_by_traj[traj_id] = 0.0
-            self.frontier_level_by_traj[traj_id] = "buffer"
+    def _get_current_window_bucket_ids(self):
+        end = min(
+            self.progress_bucket_count,
+            self.current_target_window_start + self.current_target_window_size,
+        )
+        return list(range(self.current_target_window_start, end))
 
-        for traj_id in self.active_traj_ids:
-            self.frontier_counts["buffer"] += 1
-            self.frontier_trajs_by_level["buffer"].add(int(traj_id))
+    def _frame_idx_for_bucket(self, traj_id: int, bucket_idx: int) -> int:
+        max_frame = int(self.traj_max_frame[traj_id])
+        if max_frame <= 0:
+            return 0
 
-    def _set_frontier_level(self, traj_id, new_level):
-        """
-        增量更新某条轨迹当前 frontier 的 level。
-        同时同步：
-        - frontier_level_by_traj
-        - frontier_counts
-        - frontier_trajs_by_level
-        """
-        old_level = self.frontier_level_by_traj[traj_id]
+        difficulty_ratio = float(bucket_idx) / float(self.progress_bucket_count - 1)
+        frame_ratio = 1.0 - difficulty_ratio
+        frame_idx = int(round(frame_ratio * max_frame))
+        return int(np.clip(frame_idx, 0, max_frame))
 
-        if old_level == new_level:
+    def _frame_range_for_bucket(self, traj_id: int, bucket_idx: int):
+        max_frame = int(self.traj_max_frame[traj_id])
+        if max_frame <= 0:
+            return 0, 0
+
+        left_ratio = float(bucket_idx) / float(self.progress_bucket_count)
+        right_ratio = float(bucket_idx + 1) / float(self.progress_bucket_count)
+
+        # bucket 越靠后，区间越靠近轨迹开头；每个 bucket 对应一段连续 frame
+        frame_end = int(round((1.0 - left_ratio) * max_frame))
+        frame_start = int(round((1.0 - right_ratio) * max_frame))
+
+        frame_start = int(np.clip(frame_start, 0, max_frame))
+        frame_end = int(np.clip(frame_end, 0, max_frame))
+        if frame_start > frame_end:
+            frame_start, frame_end = frame_end, frame_start
+
+        return frame_start, frame_end
+
+    def _bucket_idx_for_frame(self, traj_id: int, frame_idx: int) -> int:
+        max_frame = int(self.traj_max_frame[traj_id])
+        if max_frame <= 0:
+            return 0
+
+        frame_ratio = float(frame_idx) / float(max_frame)
+        difficulty_ratio = 1.0 - frame_ratio
+        bucket_idx = int(round(difficulty_ratio * (self.progress_bucket_count - 1)))
+        return int(np.clip(bucket_idx, 0, self.progress_bucket_count - 1))
+
+    def _rebuild_progress_buckets(self):
+        self.bucket_ranges = [[] for _ in range(self.progress_bucket_count)]
+        for bucket_idx in range(self.progress_bucket_count):
+            bucket = self.bucket_ranges[bucket_idx]
+            for traj_id in range(self.num_traj):
+                frame_start, frame_end = self._frame_range_for_bucket(traj_id, bucket_idx)
+                bucket.append((traj_id, frame_start, frame_end, self.current_n))
+
+    def _refresh_sampling_cache(self):
+        self.current_window_candidates = []
+        for bucket_idx in self._get_current_window_bucket_ids():
+            if 0 <= bucket_idx < self.progress_bucket_count:
+                self.current_window_candidates.extend(self.bucket_ranges[bucket_idx])
+
+        self.old_window_candidates = []
+        for bucket_idx in range(self.current_target_window_start):
+            if 0 <= bucket_idx < self.progress_bucket_count:
+                self.old_window_candidates.extend(self.bucket_ranges[bucket_idx])
+
+    def _sample_key_from_candidates(self, candidate_ranges):
+        if not candidate_ranges:
+            return None
+
+        traj_id, frame_start, frame_end, _ = random.choice(candidate_ranges)
+        frame_idx = random.randint(int(frame_start), int(frame_end))
+        return (int(traj_id), int(frame_idx), self.current_n)
+
+    def _clear_recent_window_stats(self):
+        self.window_recent_returns.clear()
+        self.window_recent_win_count = 0
+        self.window_recent_loss_count = 0
+
+    def _append_recent_return(self, episode_return: float):
+        episode_return = float(episode_return)
+        if episode_return not in (1.0, -1.0):
             return
 
-        if traj_id in self.active_traj_ids:
-            self.frontier_counts[old_level] -= 1
-            self.frontier_trajs_by_level[old_level].discard(traj_id)
+        if len(self.window_recent_returns) >= self.return_window_size:
+            old_return = self.window_recent_returns.popleft()
+            if old_return == 1.0:
+                self.window_recent_win_count -= 1
+            elif old_return == -1.0:
+                self.window_recent_loss_count -= 1
 
-            self.frontier_counts[new_level] += 1
-            self.frontier_trajs_by_level[new_level].add(traj_id)
-
-        self.frontier_level_by_traj[traj_id] = new_level
-
-    def _remove_traj_from_frontier_cache(self, traj_id):
-        """
-        当轨迹课程推进到 0，不再属于 active frontier 时，从缓存中移除。
-        """
-        old_level = self.frontier_level_by_traj[traj_id]
-        self.frontier_trajs_by_level[old_level].discard(traj_id)
-        self.frontier_counts[old_level] -= 1
-
-    def _update_active_traj(self, traj_id):
-        """
-        根据 traj_progress[traj_id] 是否 > 0，维护 active_traj_ids。
-        """
-        if int(self.traj_progress[traj_id]) > 0:
-            self.active_traj_ids.add(int(traj_id))
+        self.window_recent_returns.append(episode_return)
+        if episode_return == 1.0:
+            self.window_recent_win_count += 1
         else:
-            self.active_traj_ids.discard(int(traj_id))
+            self.window_recent_loss_count += 1
 
-    def update_key_stats(self, key, episode_return, high=0.4):
+    def _advance_target_window(self):
+        if self.current_target_window_start >= self._max_window_start():
+            return False
+
+        old_start = self.current_target_window_start
+        self.current_target_window_start += 1
+        self.window_move_count += 1
+        self._clear_recent_window_stats()
+        self._refresh_sampling_cache()
+
+        print(
+            f"[Curriculum] target window advance: "
+            f"{old_start}% -> {self.current_target_window_start}% "
+            f"(width={self.current_target_window_size}, n={self.current_n})"
+        )
+        return True
+
+    def update_key_stats(self, key, episode_return, high=None):
         """
-        只更新“当前 frontier key”的统计。
-        old key 不参与课程统计。
-
-        level 规则：
-        - filled < window                -> buffer
-        - mean_return >= high            -> easy
-        - mean_return > 0                -> win
-        - mean_return < 0                -> lose
-        - mean_return == 0 且全是 0      -> draw
-        - mean_return == 0 且有输有赢    -> mixed
+        只跟踪当前百分比窗口内的最近 episode 结果。
+        当最近窗口满了且 (return=1 的局数 / return=-1 的局数) 超过阈值时，
+        课程窗口右移 1%。
 
         返回:
             mean_return, visits, level, advanced
@@ -296,95 +261,44 @@ class CurriculumController:
         self.step += 1
         traj_id, frame_idx, n_control = key
 
-        current_frontier_frame = int(self.traj_progress[traj_id])
+        bucket_idx = self._bucket_idx_for_frame(traj_id, frame_idx)
+        in_current_window = bucket_idx in self._get_current_window_bucket_ids()
 
-        # old key：不参与课程统计，直接返回当前 frontier 的现状
-        if frame_idx != current_frontier_frame:
-            return (
-                float(self.frontier_mean_return_by_traj[traj_id]),
-                int(self.frontier_visits_by_traj[traj_id]),
-                self.frontier_level_by_traj[traj_id],
-                False,
-            )
-
-        # frontier key：更新 frontier 统计
-        returns_buf = self.frontier_returns_by_traj[traj_id]
-        returns_buf.append(float(episode_return))
-
-        self.frontier_visits_by_traj[traj_id] += 1
-        mean_return = float(np.mean(returns_buf))
-        self.frontier_mean_return_by_traj[traj_id] = mean_return
-
-        min_filled = self.return_window_size
-        filled = len(returns_buf)
-
-        old_level = self.frontier_level_by_traj[traj_id]
-
-        all_zero = (filled >= min_filled) and all(abs(x) < 1e-8 for x in returns_buf)
-        has_pos = any(x > 1e-8 for x in returns_buf)
-        has_neg = any(x < -1e-8 for x in returns_buf)
-
-        if filled < min_filled:
-            new_level = "buffer"
-        elif mean_return >= high:
-            new_level = "easy"
-        elif mean_return > 1e-8:
-            new_level = "win"
-        elif mean_return < -1e-8:
-            new_level = "lose"
-        elif all_zero:
-            new_level = "draw"
-        elif has_pos and has_neg:
-            new_level = "mixed"
-        else:
-            new_level = "draw"
-
-        if old_level != new_level:
-            self._set_frontier_level(traj_id, new_level)
-
-        # 如果当前 frontier 已经 easy，则推进一帧，并把新 frontier 重置为 buffer
-        advanced = False
-
-        if new_level == "easy":
-            if self.traj_progress[traj_id] > 0:
-                old_frame = int(self.traj_progress[traj_id])
-
-                self.traj_progress[traj_id] -= 1
-                self.traj_curr_progress_sum -= 1.0
-
-                new_frame = int(self.traj_progress[traj_id])
-                advanced = True
-
-                # 更新 active 集合
-                self._update_active_traj(traj_id)
-
-                if new_frame > 0:
-                    # 新 frontier 是新的课程点，统计全部重置
-                    self._reset_frontier_stats_for_traj(traj_id)
-                else:
-                    # 已不再属于 active frontier，移出统计缓存
-                    self._remove_traj_from_frontier_cache(traj_id)
-                    self.frontier_returns_by_traj[traj_id].clear()
-                    self.frontier_visits_by_traj[traj_id] = 0
-                    self.frontier_mean_return_by_traj[traj_id] = 0.0
-                    self.frontier_level_by_traj[traj_id] = "buffer"
-
-                print(
-                    f"[Curriculum] traj={traj_id} advance: "
-                    f"{old_frame} -> {new_frame} (n={self.current_n})"
-                )
+        if in_current_window:
+            self._append_recent_return(float(episode_return))
 
         # 统计当前周期
         self.period_update_count += 1
+
+        filled = len(self.window_recent_returns)
+        key_visits = 0
+        level = "ready"
+        mean_return = float(episode_return)
+        win_count = self.window_recent_win_count
+        loss_count = self.window_recent_loss_count
+        win_loss_ratio = self._safe_win_loss_ratio(win_count, loss_count)
+
+        threshold = (
+            self.window_move_win_rate_threshold if high is None else float(high)
+        )
+        advanced = False
+        if filled >= self.return_window_size and win_count > 0 and loss_count == 0:
+            advanced = self._advance_target_window()
+        elif filled >= self.return_window_size and win_loss_ratio >= threshold:
+            advanced = self._advance_target_window()
+
         if advanced:
             self.period_advanced_count += 1
-            
+
         return (
-            float(self.frontier_mean_return_by_traj[traj_id]),
-            int(self.frontier_visits_by_traj[traj_id]),
-            self.frontier_level_by_traj[traj_id],
+            mean_return,
+            key_visits,
+            level,
             advanced,
         )
+
+    def update_after_episode(self, key, episode_return):
+        return self.update_key_stats(key=key, episode_return=episode_return)
 
     def advance_n(self):
         if self.current_n >= self.max_n:
@@ -394,19 +308,15 @@ class CurriculumController:
         old_n = self.current_n
         self.current_n += 1
 
-        # 重置所有轨迹课程进度
-        self.traj_progress = self.traj_max_frame.copy()
-        self.traj_curr_progress_sum = self.traj_max_progress_sum
-
-        # 重建 active 轨迹集合
-        self.active_traj_ids = set(np.where(self.traj_progress > 0)[0].astype(int).tolist())
-
-        # 所有 frontier 作为新课程点重新开始
-        self._rebuild_frontier_stats()
+        self.current_target_window_start = 0
+        self.window_move_count = 0
+        self._clear_recent_window_stats()
+        self._rebuild_progress_buckets()
+        self._refresh_sampling_cache()
 
         print(
             f"[Curriculum] n advanced: {old_n} -> {self.current_n}, "
-            f"all traj_progress reset"
+            f"target window reset"
         )
         return True
 
@@ -430,7 +340,7 @@ class CurriculumController:
         print(f"[Trajectory] inferred players per side = {self.n_players}")
 
         num_traj = len(traj_offsets) - 1
-        traj_lengths = np.diff(traj_offsets)
+        selected_indices = self._select_trajectory_indices(num_traj)
 
         print(f"[Trajectory] loaded from: {trajectory_path}")
         print(f"[Trajectory] starts.shape = {starts.shape}")
@@ -438,36 +348,90 @@ class CurriculumController:
         print(f"[Trajectory] cycles.shape = {cycles.shape}")
 
         print(f"[Trajectory] num_traj = {num_traj}")
-        print(f"[Trajectory] traj_lengths = {traj_lengths.tolist()}")
-        print(f"[Trajectory] min_len = {traj_lengths.min()}")
-        print(f"[Trajectory] max_len = {traj_lengths.max()}")
-        print(f"[Trajectory] mean_len = {traj_lengths.mean():.2f}")
-        print(f"[Trajectory] total_frames = {traj_lengths.sum()}")
+        print(f"[Trajectory] selected_num_traj = {len(selected_indices)}")
+        if len(selected_indices) != num_traj:
+            print(f"[Trajectory] selected_indices = {selected_indices.tolist()}")
 
         trajectories = []
-        traj_progress = np.zeros(num_traj, dtype=np.int32)
+        filtered_lengths = []
+        original_lengths = []
+        traj_progress_list = []
 
-        for traj_id in range(num_traj):
+        num_empty_after_filter = 0
+        total_original_frames = 0
+        total_filtered_frames = 0
+
+        for new_traj_id, traj_id in enumerate(selected_indices):
             start = int(traj_offsets[traj_id])
             end = int(traj_offsets[traj_id + 1])
 
-            traj_len = end - start
-            frames = []
+            original_len = end - start
+            original_lengths.append(original_len)
+            total_original_frames += original_len
 
-            for local_idx, global_idx in enumerate(range(start, end)):
+            all_frames = []
+            for global_idx in range(start, end):
                 vec = starts[global_idx]
                 frame = self.decode_frame_vector(vec)
-                frames.append(frame)
+                all_frames.append(frame)
 
-            trajectories.append((traj_len, frames))
+            # 过滤：只保留 ball_x >= 0 的帧
+            filtered_frames = [frame for frame in all_frames if float(frame["ball"][0]) >= 0.0]
+            filtered_len = len(filtered_frames)
 
-            # 初始课程进度 = 该轨迹最后倒数2帧的 frame_idx
-            traj_progress[traj_id] = max(0, traj_len - 3)
+            filtered_lengths.append(filtered_len)
+            total_filtered_frames += filtered_len
 
+            if filtered_len == 0:
+                num_empty_after_filter += 1
+                # 为了不让后面 bucket / randint 出错，这里直接跳过空轨迹
+                continue
+
+            trajectories.append((filtered_len, filtered_frames))
+            traj_progress_list.append(max(0, filtered_len - 3))
+
+        if len(trajectories) == 0:
+            raise ValueError("all trajectories became empty after left-half filtering")
+
+        traj_progress = np.asarray(traj_progress_list, dtype=np.int32)
+
+        filtered_lengths_np = np.asarray(filtered_lengths, dtype=np.int32)
+        original_lengths_np = np.asarray(original_lengths, dtype=np.int32)
+
+        print(f"[Trajectory] original traj_lengths = {original_lengths_np.tolist()}")
+        print(f"[Trajectory] filtered traj_lengths = {filtered_lengths_np.tolist()}")
+        print(f"[Trajectory] original min_len = {original_lengths_np.min()}")
+        print(f"[Trajectory] original max_len = {original_lengths_np.max()}")
+        print(f"[Trajectory] original mean_len = {original_lengths_np.mean():.2f}")
+        print(f"[Trajectory] original total_frames = {total_original_frames}")
+
+        non_empty_filtered = filtered_lengths_np[filtered_lengths_np > 0]
+        if len(non_empty_filtered) > 0:
+            print(f"[Trajectory] filtered min_len = {non_empty_filtered.min()}")
+            print(f"[Trajectory] filtered max_len = {non_empty_filtered.max()}")
+            print(f"[Trajectory] filtered mean_len = {non_empty_filtered.mean():.2f}")
+        print(f"[Trajectory] filtered total_frames = {total_filtered_frames}")
+        print(f"[Trajectory] num_empty_after_filter = {num_empty_after_filter}")
+        print(f"[Trajectory] kept_ratio = {total_filtered_frames / max(1, total_original_frames):.4f}")
+
+        print(f"[Curriculum] kept non-empty trajectories = {len(trajectories)}")
         print(f"[Curriculum] traj_progress.shape = {traj_progress.shape}")
         print(f"[Curriculum] first 10 traj_progress = {traj_progress[:10].tolist()}")
 
         return trajectories, traj_progress
+
+    def _select_trajectory_indices(self, num_traj: int) -> np.ndarray:
+        if num_traj <= 0:
+            return np.asarray([], dtype=np.int32)
+
+        requested = self.num_selected_trajectories
+        if requested is None or requested <= 0 or requested >= num_traj:
+            return np.arange(num_traj, dtype=np.int32)
+
+        if self.random_sample:
+            return np.sort(np.asarray(random.sample(range(num_traj), requested), dtype=np.int32))
+
+        return np.arange(requested, dtype=np.int32)
 
     # ============================================================
     # decode frame
@@ -523,7 +487,7 @@ class CurriculumController:
     def apply_start_and_n_by_key(self, env, key):
         traj_id, frame_idx, n_control = key
 
-        _, start = self.get_starts_by_key(key)
+        _, start, _, _ = self.get_starts_by_key(key)
 
         self.set_player_mask_n(env, n_control)
 
@@ -562,49 +526,30 @@ class CurriculumController:
         sampled_frame_idx = random.randint(start_idx, end_idx)
         start = frames[sampled_frame_idx]
 
-        return sampled_frame_idx, start
+        bucket_idx = self._bucket_idx_for_frame(traj_id, frame_idx)
+        return sampled_frame_idx, start, bucket_idx, n_control
 
     def get_frontier_stats(self):
         """
-        O(1) 返回当前 frontier 统计。
+        O(1) 返回当前课程窗口统计。
         """
         stats = {}
 
-        if self.traj_max_progress_sum <= 0:
-            stats["progress_ratio"] = 0.0
-            stats["progress_percent"] = 0.0
+        stats["current_target_window_start"] = float(self.current_target_window_start)
+        stats["current_target_window_size"] = float(self.current_target_window_size)
+        if len(self.window_recent_returns) < self.return_window_size:
+            recent_win_loss_ratio = 0.0
         else:
-            stats["progress_ratio"] = (
-                self.traj_curr_progress_sum / self.traj_max_progress_sum
+            recent_win_loss_ratio = self._safe_win_loss_ratio(
+                self.window_recent_win_count, self.window_recent_loss_count
             )
-            stats["progress_percent"] = 100.0 * stats["progress_ratio"]
-
-        stats["frontier/buffer_count"] = self.frontier_counts["buffer"]
-        stats["frontier/win_count"] = self.frontier_counts["win"]
-        stats["frontier/draw_count"] = self.frontier_counts["draw"]
-        stats["frontier/mixed_count"] = self.frontier_counts["mixed"]
-        stats["frontier/lose_count"] = self.frontier_counts["lose"]
-        stats["frontier/easy_count"] = self.frontier_counts["easy"]
+        stats["recent_win_count"] = float(self.window_recent_win_count)
+        stats["recent_loss_count"] = float(self.window_recent_loss_count)
+        stats["recent_win_loss_ratio"] = float(recent_win_loss_ratio)
 
         stats["current_n"] = self.current_n
-        stats["advance_cycle/advanced_count"] = self.period_advanced_count
 
         return stats
-
-    def should_advance_n(self):
-        if self.current_n >= self.max_n:
-            return False
-
-        if self.period_update_count < self.advance_check_interval:
-            return False
-
-        should_upgrade = (self.period_advanced_count < self.advance_threshold)
-
-        # 无论升不升级，都开始下一个 5000 更新周期
-        self.period_update_count = 0
-        self.period_advanced_count = 0
-
-        return should_upgrade
 
     def infer_n_players_from_state_dim(self, frame_dim: int) -> int:
         """
@@ -634,19 +579,3 @@ class CurriculumController:
             raise ValueError(f"invalid n_players={n_players}")
 
         return int(n_players)
-
-if __name__ == "__main__":
-    controller = CurriculumController(init_n=1)
-
-    # 取第一条轨迹
-    traj_len, frames = controller.trajectories[0]
-
-    # 最后一帧
-    last_frame = frames[-1]
-
-    print("=== First trajectory last frame ===")
-    print("traj_len:", traj_len)
-    print("ball:", last_frame["ball"])
-    print("left_players:", last_frame["left_players"])
-    print("right_players:", last_frame["right_players"])
-    print("body_angles:", last_frame["body_angles"])

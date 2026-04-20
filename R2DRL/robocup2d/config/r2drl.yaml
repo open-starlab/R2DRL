@@ -49,6 +49,7 @@ env_args:
   game_logging: false 
 
   curriculum: true
+  rewardshaping: false
   tb: true
   tb_log_dir: "./runs/r2drl"
 

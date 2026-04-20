@@ -392,9 +392,25 @@ bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
             const double current_body = world().self().body().degree();
             double moment = double(target_deg) - current_body;
 
+            if (!std::isfinite(target_deg) || !std::isfinite(moment)) {
+                this->doTurn(0.0);
+                this->setViewAction(new View_Tactical());
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+                sent = true;
+                break;
+            }
+
             // wrap 到 [-180, 180]
             while (moment > 180.0)  moment -= 360.0;
             while (moment < -180.0) moment += 360.0;
+
+            if (!std::isfinite(moment)) {
+                this->doTurn(0.0);
+                this->setViewAction(new View_Tactical());
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+                sent = true;
+                break;
+            }
 
             this->doTurn(moment);
             this->setViewAction(new View_Tactical());
@@ -1065,14 +1081,14 @@ void
 SamplePlayer::communicationImpl()
 {
 
-    if ( M_communication )
-    {
-        M_communication->execute( this );
-    }
-    else
-    {
-    }
-
+    // if ( M_communication )
+    // {
+    //     M_communication->execute( this );
+    // }
+    // else
+    // {
+    // }
+    return;
 }
 
 
@@ -1862,9 +1878,23 @@ void SamplePlayer::takeAction(int n) {
             // 计算最短旋转角
             double moment = target_deg - current_body;
 
+            if (!std::isfinite(target_deg) || !std::isfinite(moment)) {
+                this->doTurn(0.0);
+                this->setViewAction(new View_Tactical());
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+                break;
+            }
+
             // wrap 到 [-180,180]
             while (moment > 180.0)  moment -= 360.0;
             while (moment < -180.0) moment += 360.0;
+
+            if (!std::isfinite(moment)) {
+                this->doTurn(0.0);
+                this->setViewAction(new View_Tactical());
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+                break;
+            }
             
             // std::cout << "[TURN] target=" << target_deg << " current=" << current_body << " moment=" << moment << std::endl;
             this->doTurn(moment);
@@ -1879,6 +1909,9 @@ void SamplePlayer::takeAction(int n) {
         default: {
             break;
         }
+    }
+    if (!this->effector().bodyCommand() && !world().self().isFrozen()) {
+        this->doTurn(0.0);
     }
     this->setNeckAction(new Neck_TurnToBallOrScan(0));
     
@@ -1914,7 +1947,9 @@ void SamplePlayer::setActionMask() {
     action_mask[2] = !wm.self().isKickable();
 
     // 3 解围
-    action_mask[3] = advance_ball_action.isExecutable(this);
+    // action_mask[3] = advance_ball_action.isExecutable(this);
+    action_mask[3] = false;
+
 
     // 4–6: 各种传球（暂时共用 isExecutable）
     action_mask[4] = pass_action.isExecutable(this);  // Direct Pass
@@ -1976,7 +2011,6 @@ void SamplePlayer::setActionMask() {
 
 
 bool SamplePlayer::initSharedMemory() {
-
 
     if (SHM_NAME.empty()) {
         return false;

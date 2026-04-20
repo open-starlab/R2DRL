@@ -207,6 +207,56 @@ class Runtime:
         self.kill_all()
         self.start_procs()
 
+    def restart_session(self, where: str = "restart") -> None:
+        old_run_id = self.run_id
+        old_lock_fd = self._lock_fd
+        old_names = []
+
+        if self.coach_shm_id:
+            old_names.append(self.coach_shm_id)
+        if self.trainer_shm_id:
+            old_names.append(self.trainer_shm_id)
+        if self.player_shm_ids:
+            old_names.extend(self.player_shm_ids.values())
+
+        self.kill_all()
+
+        for name in old_names:
+            ipc.cleanup_shm(name, unlink=True, log=self.log)
+
+        if old_lock_fd is not None and old_run_id is not None:
+            P.common._safe(
+                proc.release_run_lock,
+                old_run_id,
+                old_lock_fd,
+                log=self.log,
+            )
+
+        self.run_id = uuid.uuid4().hex
+        self._lock_fd = proc.acquire_run_lock(self.run_id, log=self.log)
+        self.log.info(f"[{where}] run_id={self.run_id}")
+
+        base_logs_dir = os.path.abspath(self.config.logs_dir)
+        self.log_dir = os.path.join(base_logs_dir, self.run_id)
+        self.rcg_dir = os.path.join(self.log_dir, "rcg")
+
+        os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(self.rcg_dir, exist_ok=True)
+
+        (
+            self.coach_shm_id,
+            self.trainer_shm_id,
+            self.player_shm_ids,
+            _,
+        ) = ipc.build_shm_layout(
+            run_id=self.run_id,
+            base_port=self.base_port,
+            team1=self.config.team1,
+            team2=self.config.team2,
+            n1=self.config.n1,
+            n2=self.config.n2,
+        )
+
     # ==========================================================
     # Health
     # ==========================================================

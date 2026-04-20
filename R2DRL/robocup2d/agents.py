@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Tuple, List, Sequence
 import numpy as np
+from pathlib import Path
 from .protocols import P
 from . import ipc
 import time
@@ -78,7 +79,13 @@ class Agents:
         self._obs_buf = np.empty((len(self.player_list), P.player.STATE_NUM),dtype=np.float32,)
         self._mask_buf = np.empty((len(self.player_list), self.n_actions),dtype=np.int32,)
         
-        
+        self.kickable = False
+        self.kickable_threshold = 1.085
+
+        self.epv_grid = self._load_epv_grid()
+        self.current_epv = 0.0
+        self.max_episode_epv = 0.0
+
     def get_player(self, team: int, unum: int) -> P.player.Player:
         return self.players[(team, unum)]
 
@@ -139,6 +146,56 @@ class Agents:
                     shm.unlink()
                 except Exception:
                     pass
+
+    def _load_epv_grid(self) -> np.ndarray:
+        epv_path = (
+            Path(__file__).resolve().parent
+            / "LaurieOnTracking"
+            / "EPV_grid.csv"
+        )
+        return np.loadtxt(epv_path, delimiter=",", dtype=np.float32)
+
+    def get_ball_position_epv(
+        self,
+        position: Tuple[float, float] | None = None,
+        attack_direction: int = 1,
+    ) -> float:
+        if position is None:
+            state = self.state(norm=False)
+            position = (float(state[0]), float(state[1]))
+
+        x, y = position
+        field_length = float(self.config.half_length) * 2.0
+        field_width = float(self.config.half_width) * 2.0
+
+        if abs(x) > field_length / 2.0 or abs(y) > field_width / 2.0:
+            return 0.0
+
+        epv = self.epv_grid
+        if attack_direction == -1:
+            epv = np.fliplr(epv)
+
+        ny, nx = epv.shape
+        dx = field_length / float(nx)
+        dy = field_width / float(ny)
+        ix = int((x + field_length / 2.0 - 1e-4) / dx)
+        iy = int((y + field_width / 2.0 - 1e-4) / dy)
+        ix = min(max(ix, 0), nx - 1)
+        iy = min(max(iy, 0), ny - 1)
+        return float(epv[iy, ix])
+
+    def reset_episode_epv(self) -> float:
+        self.current_epv = self.get_ball_position_epv()
+        self.max_episode_epv = self.current_epv
+        return self.max_episode_epv
+
+    def update_episode_epv(self) -> float:
+        if not self.kickable:
+            return self.max_episode_epv
+
+        self.current_epv = self.get_ball_position_epv()
+        self.max_episode_epv = max(self.max_episode_epv, self.current_epv)
+        return self.max_episode_epv
 
     def state(self, norm: bool = True):
         """
@@ -285,10 +342,10 @@ class Agents:
                         obj.noop()
                     else:
                         obj.take_default_action(is_hybrid=(self.config.team1 == "hybrid"))
-                        if self.log:
-                            self.log.info(
-                            f"[rescue] dist={self.read_all_flags()}"
-                            )
+                        # if self.log:
+                        #     self.log.info(
+                        #     f"[rescue] dist={self.read_all_flags()}"
+                            # )
 
                     pushed += 1
 
@@ -418,7 +475,6 @@ class Agents:
         return out
 
     def set_agent_mask(self) -> np.ndarray:
-
         n = min(int(self.current_mask_n), self.config.n1)
 
         state = self.state(norm=False)
@@ -440,6 +496,12 @@ class Agents:
 
         self.agent_mask[:] = False
         self.agent_mask[nearest_idx] = True
+
+        if len(sorted_idx) > 0:
+            nearest_dist = float(dists[sorted_idx[0]])
+            self.kickable = (nearest_dist <= self.kickable_threshold)
+        else:
+            self.kickable = False
 
         return self.agent_mask.copy()
 

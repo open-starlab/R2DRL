@@ -24,6 +24,7 @@ class EnvConfig:
             "trainer_ready_timeout_ms",
             "ports_wait_timeout", "server_wait_seconds",
             "curriculum",
+            "rewardshaping",
             "text_logging",
             "game_logging",
 
@@ -115,6 +116,7 @@ class EnvConfig:
 
         # ---------- Curriculum ----------
         self.curriculum: bool = self._require_bool(args, "curriculum")
+        self.rewardshaping: bool = self._require_bool(args, "rewardshaping")
         self.init_n: int = self._require_int(args, "init_n")
 
         if not (1 <= self.init_n <= self.n):

@@ -49,8 +49,8 @@ env_args:
   game_logging: true 
 
   curriculum: false
+  rewardshaping: false
 
   tb: true
   tb_log_dir: "./runs/robocup"
   init_n: 1            # 初始受控球员数量
-

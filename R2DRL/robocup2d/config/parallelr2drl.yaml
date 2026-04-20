@@ -49,9 +49,18 @@ env_args:
   game_logging: false 
 
   curriculum: true
+  rewardshaping: false
   tb: true
   tb_log_dir: "./runs/r2drl"
 
 
   init_n: 1            # 初始受控球员数量
+  start_window_size: 1
+  return_window_size: 150
+  progress_bucket_count: 100
+  current_target_window_size: 3
+  window_move_win_rate_threshold: 1.5
+  rollback_win_loss_ratio_threshold: 0.4
+  num_selected_trajectories: 100
+  random_sample: false
   

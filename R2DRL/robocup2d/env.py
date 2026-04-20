@@ -15,7 +15,6 @@ from .agents import Agents
 from .curriculum import CurriculumController
 from .tb_logger import TBLogger
 
-
 class ParallelR2DRL:
     def __init__(self, cfg="r2drl.yaml", **env_args):
         self.env = Robocup2dEnv(cfg=cfg, **env_args)
@@ -33,9 +32,9 @@ class ParallelR2DRL:
             self.env.test_mode = False
         
         info = self.env.reset(*args, **kwargs)
-        self.env.agents.set_agent_mask()
 
         return info
+
     def set_start_and_n(self,start, n_control):
         self.env.agents.set_mask_n(n_control)
         self.env.agents.configure_reset_start(
@@ -48,8 +47,7 @@ class ParallelR2DRL:
 
     def step(self, actions):
         reward, done, info = self.env.step(actions)
-        self.env.agents.set_agent_mask()
-        return reward, done, info
+        return reward,  done, info
     
     def get_stats(self):
         return {}
@@ -86,6 +84,11 @@ class R2DRL:
         )
         self.controller = CurriculumController(
             init_n=self.env.config.init_n,
+            start_window_size=self.env.config.start_window_size,
+            return_window_size=self.env.config.return_window_size,
+            progress_bucket_count=self.env.config.progress_bucket_count,
+            current_target_window_size=self.env.config.current_target_window_size,
+            window_move_win_rate_threshold=self.env.config.window_move_win_rate_threshold,
         )
 
         self.global_episode = 0
@@ -114,13 +117,11 @@ class R2DRL:
             )
 
         info = self.env.reset(*args, **kwargs)
-        self.env.agents.set_agent_mask()
 
         return info
 
     def step(self, actions):
         reward, done, info = self.env.step(actions)
-        self.env.agents.set_agent_mask()
 
         if done:
             if self.test_mode:
@@ -218,13 +219,31 @@ class Robocup2dEnv:
         self.last_avail_actions = self.agents.get_team1_avail_actions()
         return self.last_avail_actions
 
+    def restart(self):
+        old_agents = self.agents
+
+        self.runtime.restart_session()
+
+        try:
+            old_agents.close()
+        except Exception:
+            pass
+
+        self.agents = Agents(
+            coach_shm_id=self.runtime.coach_shm_id,
+            trainer_shm_id=self.runtime.trainer_shm_id,
+            player_shm_ids=self.runtime.player_shm_ids,
+            config=self.config,
+            log=self.log,
+        )
+        self.runtime.start_procs()
+
     def reset(self):
         self.turn_count += 1
 
         if self._need_restart or (not self.runtime.has_live_procs()):
             self._need_restart = False
-            self.agents.clear_all_shm_bufs()
-            self.runtime.restart()
+            self.restart()
             print("restart!!")
 
         self.last_state = None
@@ -237,7 +256,7 @@ class Robocup2dEnv:
         cycle = self.agents.coach.cycle()
         if not self.agents.wait_all_ready():
             raise P.common.ShmProtocolError("Not READY Before Reset!!")
-        print(f"[RESET] turn={self.turn_count}, score=[{self.score[0]},{self.score[1]}], cycle={cycle}")
+        # print(f"[RESET] turn={self.turn_count}, score=[{self.score[0]},{self.score[1]}], cycle={cycle}")
         
         if self.config.curriculum:
             if self.test_mode:
@@ -250,13 +269,16 @@ class Robocup2dEnv:
 
         self.agents.coach.clear_goal_flag()
 
+        self.agents.set_agent_mask()
+        self.agents.reset_episode_epv()
+
         return {
             "turn_count": self.turn_count,
             "score_left": self.score[0],
             "score_right": self.score[1],
+            "max_episode_epv": float(self.agents.max_episode_epv),
         }
     
-
     def step(self, actions):
         self.episode_steps += 1
 
@@ -267,26 +289,37 @@ class Robocup2dEnv:
         self.agents.write_actions(actions)
         self._need_restart = not self.agents.wait_all_ready()
 
+        self.agents.set_agent_mask()
+        self.agents.update_episode_epv()
+
         timeout = (self.episode_steps >= self.episode_limit)
         goal = self.agents.coach.goal()
         reward = 0.0
         self.done = 0
+        win = 0
+        lose = 0
 
         if timeout or self._need_restart:
             self.done = 1
+            if timeout and self.config.rewardshaping:
+                reward = float(self.agents.max_episode_epv)
         elif goal == 1:
             self.done = 1
             reward = 1.0
+            win = 1
             self.score[0] += 1
         elif goal == -1:
             self.done = 1
             reward = -1.0
+            lose = 1
             self.score[1] += 1
 
         info = {
-            "win": int(reward > 0),
-            "lose": int(reward < 0),
+            "win": win,
+            "lose": lose,
             "timeout": int(timeout),
+            "max_episode_epv": float(self.agents.max_episode_epv),
+            "rewardshaping": int(timeout and self.config.rewardshaping),
         }
         return float(reward), bool(self.done), info
 
