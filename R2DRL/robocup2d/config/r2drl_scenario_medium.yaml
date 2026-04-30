@@ -47,7 +47,7 @@ env_args:
   terminate_on_possession_loss: true
   reward_on_possession_loss: 0.0
   tb: true
-  init_n: 3
+  init_n: 1
   trajectory_path: /fsws1/h_qin/robocup/robocup/pymarl/src/envs/robocup2d/trajectories/3v3trajectories_right_half_left_nearest_kickable.npz
   start_window_size: 1
   progress_bucket_count: 30
@@ -64,4 +64,4 @@ env_args:
   scenario_start: middle
   scenario_difficulty: middle
   useMaxEpv: false
-  tb_log_dir: ./runs/r2drl_benchmark_scenario_medium_n3
+  tb_log_dir: ./runs/r2drl_scenario_medium

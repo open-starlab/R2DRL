@@ -116,9 +116,9 @@ pymarl/src/envs/robocup2d/config/
   - `robocup_benchmark_full_match_medium_epv.yaml`
   - `robocup_benchmark_full_match_hard.yaml`
   - `robocup_benchmark_full_match_hard_epv.yaml`
-  - `r2drl_benchmark_scenario_easy.yaml`
-  - `r2drl_benchmark_scenario_medium.yaml`
-  - `r2drl_benchmark_scenario_hard.yaml`
+  - `r2drl_scenario_easy.yaml`
+  - `r2drl_scenario_medium.yaml`
+  - `r2drl_scenario_hard.yaml`
   - `robocup_benchmark_actionspace_easy_base.yaml`
   - `robocup_benchmark_actionspace_easy_hybrid.yaml`
 
@@ -432,7 +432,7 @@ python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_epv
 ### 11.2 跑 3vs3 scenario benchmark
 
 ```bash
-python main.py --config=qmix --env-config=r2drl_benchmark_scenario_easy
+python main.py --config=qmix --env-config=r2drl_scenario_easy
 ```
 
 或者并行训练版本：
@@ -444,8 +444,8 @@ python main.py --config=qmix --env-config=parallelr2drl
 如果你想明确跑 benchmark 预设，建议直接用：
 
 ```bash
-python main.py --config=qmix --env-config=r2drl_benchmark_scenario_medium
-python main.py --config=qmix --env-config=r2drl_benchmark_scenario_hard
+python main.py --config=qmix --env-config=r2drl_scenario_medium
+python main.py --config=qmix --env-config=r2drl_scenario_hard
 ```
 
 ### 11.3 继续训练或做评估
@@ -662,7 +662,7 @@ results/tb_logs/<unique_token>/
 
 1. 先用 `robocup_benchmark_full_match_easy`
    - 确认 11vs11 全场能稳定跑起来
-2. 再用 `r2drl_benchmark_scenario_easy`
+2. 再用 `r2drl_scenario_easy`
    - 确认 scenario 起点采样能正常工作
 3. 然后切到 `medium` 和 `hard`
    - 看难度提升后的指标变化

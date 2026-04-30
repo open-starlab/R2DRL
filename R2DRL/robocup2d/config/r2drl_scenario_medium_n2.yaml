@@ -61,7 +61,7 @@ env_args:
   team: Base
   opponent_state: easy
   opponent_level: 0.3
-  scenario_start: easy
-  scenario_difficulty: easy
+  scenario_start: middle
+  scenario_difficulty: middle
   useMaxEpv: false
-  tb_log_dir: ./runs/r2drl_benchmark_scenario_easy_n2
+  tb_log_dir: ./runs/r2drl_scenario_medium_n2

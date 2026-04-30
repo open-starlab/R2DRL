@@ -144,9 +144,9 @@ scenario_difficulty: easy
 
 | 文件 | scenario_start | scenario_difficulty | bucket |
 |---|---|---|---|
-| `r2drl_benchmark_scenario_easy.yaml` | easy | easy | 3 |
-| `r2drl_benchmark_scenario_medium.yaml` | middle | middle | 15 |
-| `r2drl_benchmark_scenario_hard.yaml` | hard | hard | 29 |
+| `r2drl_scenario_easy.yaml` | easy | easy | 3 |
+| `r2drl_scenario_medium.yaml` | middle | middle | 15 |
+| `r2drl_scenario_hard.yaml` | hard | hard | 29 |
 
 这三个文件的对手状态目前都固定为：
 
@@ -185,9 +185,9 @@ pymarl/src/envs/robocup2d/config/
 
 ### 4.2 Scenario benchmark
 
-- `r2drl_benchmark_scenario_easy.yaml`
-- `r2drl_benchmark_scenario_medium.yaml`
-- `r2drl_benchmark_scenario_hard.yaml`
+- `r2drl_scenario_easy.yaml`
+- `r2drl_scenario_medium.yaml`
+- `r2drl_scenario_hard.yaml`
 
 共同特点：
 
@@ -436,7 +436,7 @@ conda activate marl
 运行一个 scenario benchmark：
 
 ```bash
-python -u main.py --config=qmix --env-config=r2drl_benchmark_scenario_easy --capture=no
+python -u main.py --config=qmix --env-config=r2drl_scenario_easy --capture=no
 ```
 
 运行 full match benchmark：
@@ -458,14 +458,14 @@ python -u main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_e
 新增实验时建议从最接近的文件复制一份，例如：
 
 ```bash
-cp r2drl_benchmark_scenario_easy.yaml r2drl_benchmark_scenario_easy_maxepv.yaml
+cp r2drl_scenario_easy.yaml r2drl_scenario_easy_maxepv.yaml
 ```
 
 然后修改：
 
 ```yaml
 useMaxEpv: true
-tb_log_dir: ./runs/r2drl_benchmark_scenario_easy_maxepv
+tb_log_dir: ./runs/r2drl_scenario_easy_maxepv
 ```
 
 如果要改 scenario 起点难度，修改：

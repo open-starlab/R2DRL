@@ -50,9 +50,9 @@ Shared setup:
 
 Variants:
 
-- easy: `--env-config=r2drl_benchmark_scenario_easy` with baked-in `opponent_level=0.3`
-- medium: `--env-config=r2drl_benchmark_scenario_medium` with baked-in `opponent_level=0.6`
-- hard: `--env-config=r2drl_benchmark_scenario_hard` with baked-in `opponent_level=0.9`
+- easy: `--env-config=r2drl_scenario_easy` with baked-in `opponent_level=0.3`
+- medium: `--env-config=r2drl_scenario_medium` with baked-in `opponent_level=0.6`
+- hard: `--env-config=r2drl_scenario_hard` with baked-in `opponent_level=0.9`
 
 Expected logs:
 
