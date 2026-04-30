@@ -101,6 +101,7 @@ private:
 
 
     std::string RUN_MODE_ = "Helios";   // 只保存原始参数（可留作日志）
+    double LEVEL_ = 1.0;
     enum class Mode { Base, Helios, Hybrid };
     Mode mode_ = Mode::Helios;          // ✅ 运行期使用的枚举
 
@@ -162,6 +163,7 @@ private:
     bool isDoShootExecutable();
     bool isDoForceKickExecutable();
     bool initSharedMemory(); 
+    void runHeliosMaintenanceAction_();
     void runHeliosFrame_();
     bool isDoCatchExecutable() const;
     int getActionFromSharedMemory();  // 在 actionImpl 中调用

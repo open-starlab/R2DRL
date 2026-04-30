@@ -1,5 +1,10 @@
 # RoboCup 2D RL Environment
 
+中文完整手册请优先阅读：
+
+- [GUIDE_CN.md](/fsws1/h_qin/robocup/robocup/pymarl/src/envs/robocup2d/GUIDE_CN.md)
+- [BENCHMARKS.md](/fsws1/h_qin/robocup/robocup/pymarl/src/envs/robocup2d/BENCHMARKS.md)
+
 This package provides a high-performance, Python-based Reinforcement Learning environment for the RoboCup 2D Soccer Simulation. It wraps the complex interactions between the RoboCup Soccer Server (`rcssserver`), players, coach, and trainer into a unified, Gym-like interface suitable for Multi-Agent Reinforcement Learning (MARL).
 
 ## Key Features

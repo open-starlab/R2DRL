@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class EnvConfig:
@@ -23,12 +23,12 @@ class EnvConfig:
             "wait_ready_timeout", "playon_timeout",
             "trainer_ready_timeout_ms",
             "ports_wait_timeout", "server_wait_seconds",
-            "curriculum",
-            "rewardshaping",
+            "use_custom_start",
+            "useMaxEpv",
             "text_logging",
             "game_logging",
 
-            # curriculum parameters
+            # custom start parameters
             "init_n",
 
             # tensorboard
@@ -60,6 +60,9 @@ class EnvConfig:
         self.team2: str = self.team
 
         self.is_hybrid: bool = (self.team == "hybrid")
+        self.opponent_level: float = float(args.get("opponent_level", 1.0))
+        if not (0.0 <= self.opponent_level <= 1.0):
+            raise ValueError(f"opponent_level must be in [0, 1], got {self.opponent_level}")
 
         # ---------- Logging ----------
         self.text_logging: bool = self._require_bool(args, "text_logging")
@@ -114,10 +117,45 @@ class EnvConfig:
         self.ports_wait_timeout: float = self._require_float(args, "ports_wait_timeout")
         self.server_wait_seconds: float = self._require_float(args, "server_wait_seconds")
 
-        # ---------- Curriculum ----------
-        self.curriculum: bool = self._require_bool(args, "curriculum")
-        self.rewardshaping: bool = self._require_bool(args, "rewardshaping")
+        # ---------- Custom Start ----------
+        self.use_custom_start: bool = self._require_bool(args, "use_custom_start")
+        self.useMaxEpv: bool = self._require_bool(args, "useMaxEpv")
         self.init_n: int = self._require_int(args, "init_n")
+        self.trajectory_path: Optional[str] = self._optional_str(
+            args, "trajectory_path", None
+        )
+        self.start_window_size: int = int(args.get("start_window_size", 1))
+        self.progress_bucket_count: int = int(args.get("progress_bucket_count", 100))
+        self.current_target_window_size: int = int(
+            args.get("current_target_window_size", 3)
+        )
+        self.num_selected_trajectories = args.get("num_selected_trajectories", 10)
+        self.random_sample: bool = bool(args.get("random_sample", False))
+        self.terminate_on_goal: bool = self._optional_bool(
+            args, "terminate_on_goal", True
+        )
+        self.terminate_on_possession_loss: bool = self._optional_bool(
+            args, "terminate_on_possession_loss", False
+        )
+        self.reward_on_possession_loss: float = self._optional_float(
+            args, "reward_on_possession_loss", 0.0
+        )
+        self.scenario_difficulty: Optional[str] = self._optional_str(
+            args, "scenario_difficulty", None
+        )
+        self.scenario_difficulty_buckets = args.get(
+            "scenario_difficulty_buckets", None
+        )
+        if self.scenario_difficulty is not None:
+            scenario_difficulty = self.scenario_difficulty.strip().lower()
+            if scenario_difficulty == "medium":
+                scenario_difficulty = "middle"
+            if scenario_difficulty not in ("easy", "middle", "hard"):
+                raise ValueError(
+                    "scenario_difficulty must be one of: easy, middle/medium, hard; "
+                    f"got {self.scenario_difficulty!r}"
+                )
+            self.scenario_difficulty = scenario_difficulty
 
         if not (1 <= self.init_n <= self.n):
             raise ValueError(
@@ -162,8 +200,35 @@ class EnvConfig:
             raise TypeError(f"'{key}' must be str, got {type(val)}")
         return val
 
+    def _optional_str(
+        self,
+        args: Dict[str, Any],
+        key: str,
+        default: Optional[str] = None,
+    ) -> Optional[str]:
+        if key not in args or args[key] is None:
+            return default
+        val = args[key]
+        if not isinstance(val, str):
+            raise TypeError(f"'{key}' must be str, got {type(val)}")
+        return val
+
     def _require_bool(self, args: Dict[str, Any], key: str) -> bool:
         val = args[key]
         if not isinstance(val, bool):
             raise TypeError(f"'{key}' must be bool, got {type(val)}")
         return val
+
+    def _optional_bool(
+        self, args: Dict[str, Any], key: str, default: bool
+    ) -> bool:
+        if key not in args:
+            return bool(default)
+        return self._require_bool(args, key)
+
+    def _optional_float(
+        self, args: Dict[str, Any], key: str, default: float
+    ) -> float:
+        if key not in args:
+            return float(default)
+        return self._require_float(args, key)

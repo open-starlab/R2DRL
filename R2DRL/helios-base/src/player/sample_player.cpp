@@ -205,7 +205,8 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
 
     my_params.add()
         ( "shm-name", "",       &SHM_NAME,   "shared memory name" )
-        ( "mode",     "Helios", &RUN_MODE_,  "run mode: Base|Helios|Hybrid" );
+        ( "mode",     "Helios", &RUN_MODE_,  "run mode: Base|Helios|Hybrid" )
+        ( "level",    "",       &LEVEL_,     "difficulty level in [0,1]" );
 
     // 4) 解析附加参数
     cmd_parser.parse( my_params );
@@ -228,6 +229,8 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
     {
         mode_ = Mode::Helios;  // 默认兜底
     }
+
+    LEVEL_ = std::max( 0.0, std::min( 1.0, LEVEL_ ) );
 
     // 6) 处理 help 选项
     int help_cnt = cmd_parser.count( "help" );
@@ -256,6 +259,7 @@ SamplePlayer::initImpl( CmdLineParser & cmd_parser )
     }
     std::cerr << "[INIT] team=" << config().teamName()
         << " mode=" << RUN_MODE_
+        << " level=" << LEVEL_
         << " cfg_dir=" << cfg_dir
         << " shm_name=" << SHM_NAME
         << std::endl;
@@ -377,7 +381,13 @@ bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
         }
         // 在 switch(a) 里新增
         case 4: { // HELIOS: same as discrete action 17
-            runHeliosFrame_();
+            const double p = static_cast<double>( std::rand() ) / ( static_cast<double>( RAND_MAX ) + 1.0 );
+            if ( p < LEVEL_ ) {
+                runHeliosFrame_();
+            }
+            else {
+                runHeliosMaintenanceAction_();
+            }
             sent = true;
             break;
         }
@@ -771,8 +781,46 @@ SamplePlayer::actionImpl()
     return;
 }
 
+void SamplePlayer::runHeliosMaintenanceAction_()
+{
+    const WorldModel & wm = world();
+
+    std::cerr << "[HELIOS][maintenance] time=" << wm.time()
+              << " unum=" << wm.self().unum()
+              << " kickable=" << wm.self().isKickable()
+              << " game_mode=" << wm.gameMode().type()
+              << std::endl;
+
+    // 1. 先保留原版 Helios 的 preprocess 链。
+    if (doPreprocess()) {
+        std::cerr << "[HELIOS][maintenance] do_preprocess" << std::endl;
+        return;
+    }
+
+    // 2. 持球时只护球。
+    if (wm.self().isKickable()) {
+        std::cerr << "[HELIOS][maintenance] hold_ball" << std::endl;
+        Body_HoldBall2008().execute(this);
+        this->setNeckAction(new Neck_TurnToBallOrScan(0));
+        return;
+    }
+
+    // 3. 否则就按无球跑位处理。
+    std::cerr << "[HELIOS][maintenance] basic_move" << std::endl;
+    Bhv_BasicMove().execute(this);
+    this->setNeckAction(new Neck_TurnToBallOrScan(0));
+}
+
 void SamplePlayer::runHeliosFrame_()
 {
+    const WorldModel & wm = world();
+
+    std::cerr << "[HELIOS][frame] time=" << wm.time()
+              << " unum=" << wm.self().unum()
+              << " kickable=" << wm.self().isKickable()
+              << " game_mode=" << wm.gameMode().type()
+              << std::endl;
+
     // audio hook (keep as-is)
     if (this->audioSensor().trainerMessageTime() == world().time()) {
         // noop
@@ -787,6 +835,7 @@ void SamplePlayer::runHeliosFrame_()
     ActionChainHolder::instance().setActionGenerator(M_action_generator);
 
     if (doPreprocess()) {
+        std::cerr << "[HELIOS][frame] doPreprocess handled frame" << std::endl;
         return;
     }
 
@@ -802,21 +851,24 @@ void SamplePlayer::runHeliosFrame_()
     }
 
     if (role_ptr->acceptExecution(world())) {
+        std::cerr << "[HELIOS][frame] role execute via acceptExecution" << std::endl;
         role_ptr->execute(this);
         return;
     }
 
-    // 这里建议：如果你想“真正按 Helios PlayOn 行为”，就不要依赖 mode_
     if (world().gameMode().type() == GameMode::PlayOn) {
+        std::cerr << "[HELIOS][frame] role execute in PlayOn" << std::endl;
         role_ptr->execute(this);
         return;
     }
 
     if (world().gameMode().isPenaltyKickMode()) {
+        std::cerr << "[HELIOS][frame] penalty kick behavior" << std::endl;
         Bhv_PenaltyKick().execute(this);
         return;
     }
 
+    std::cerr << "[HELIOS][frame] set play behavior" << std::endl;
     Bhv_SetPlay().execute(this);
     
 
@@ -1749,6 +1801,11 @@ void SamplePlayer::takeAction(int n) {
 
     const int cyc = world().time().cycle();
 
+    std::cerr << "[ACTION][discrete] cycle=" << cyc
+              << " unum=" << wm.self().unum()
+              << " action=" << n
+              << std::endl;
+
     switch (n) {
         case 0: {
             move_behavior.doTackle(this);
@@ -1768,7 +1825,7 @@ void SamplePlayer::takeAction(int n) {
         }
 
         case 2: {
-            move_behavior.doIntercept(this);  // 内部会判断是否需要拦截
+            move_behavior.doTackle(this);  // 内部会判断是否需要拦截
             break;
         }
 
@@ -1858,8 +1915,13 @@ void SamplePlayer::takeAction(int n) {
             break;
         }
         case 17: {
-            // reserved for future use
-            runHeliosFrame_();
+            const double p = static_cast<double>( std::rand() ) / ( static_cast<double>( RAND_MAX ) + 1.0 );
+            if ( p < LEVEL_ ) {
+                runHeliosFrame_();
+            }
+            else {
+                runHeliosMaintenanceAction_();
+            }
             break ;
         }
         case 18:

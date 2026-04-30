@@ -29,15 +29,89 @@ class Agents:
         self.agent_mask = np.ones(self.config.n1, dtype=bool)
         self.current_mask_n = self.config.n1
 
-        self.DEFAULT_BALL =  (0.0, 0.0, 0.0, 0.0)
-        self.DEFAULT_LEFT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] =  [(-49.4, 0.0, 91.653, 0.0, 0.0), (-15.1283, -4.5671, 16.782, 0.0065, 0.0017), (-16.162, 3.3026, -11.42, 0.0003, 0.0), (-10.5396, -14.8081, 45.641, 0.3438, -0.1142), (-11.6838, 13.1449, -48.203, 0.0615, 0.0175), (-9.6667, 0.05, 0.187, 1.0, 0.0032), (-3.4658, -4.1658, 71.133, 0.319, 0.9212), (-2.6538, 6.4602, 4.786, 0.9367, 0.0785), (-2.4045, -18.7443, -34.77, 0.8215, -0.5702), (-3.8442, 19.2776, 43.659, 0.7235, 0.6903), (-4.202, 0.0046, -1.803, 0.1202, -0.0022)]
-        self.DEFAULT_RIGHT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] =  [(49.7789, 0.0261, -88.469, 0.0, 0.0), (12.2884, 5.0, -67.727, -0.0035, 0.0), (12.2555, -5.0, 67.876, -0.011, 0.0), (11.1898, 15.5762, -36.079, -0.0592, 0.024), (11.6398, -14.0389, -160.873, -0.0245, -0.0075), (12.0492, 0.4159, -87.745, -0.0255, 0.0007), (7.9027, 8.0888, -43.974, 0.0, 0.0), (8.0057, -8.2308, 43.315, 0.0, 0.0), (2.142, 11.7958, -9.925, -0.0103, 0.0015), (2.4851, -12.012, 11.958, -0.0082, -0.0013), (9.1964, 4.717, -60.697, -0.002, 0.0035)]
-        self.DEFAULT_BODY_ANGLES =  [91.653, 16.782, -11.42, 45.641, -48.203, 0.187, 71.133, 4.786, -34.77, 43.659, -1.803, -88.469, -67.727, 67.876, -36.079, -160.873, -87.745, -43.974, 43.315, -9.925, 11.958, -60.697]
-        
-        self.CUSTOM_BALL =  (-13.1491, 19.7303, 0.4673, 0.561)
-        self.CUSTOM_LEFT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] =  [(-49.8471, 5.9114, 90.356, 0.0, 0.0), (-23.1647, 3.9302, 1.776, 0.633, 0.0055), (-28.0549, 13.5735, 10.179, 0.9778, 0.1767), (-23.6264, -7.5945, -10.685, 0.9828, -0.1855), (-29.2598, 20.0184, 25.46, 0.1445, 0.0687), (-21.7763, 9.0218, 25.515, 0.87, 0.4077), (-17.4081, -4.1642, -10.551, 0.977, -0.1805), (-18.63, 18.1475, 2.413, 0.9928, 0.0432), (-7.6974, -18.9974, -18.357, 0.0057, -0.002), (-14.6238, 18.5795, 49.841, 0.557, 0.6262), (-1.8707, 8.3827, 12.983, 0.23, 0.1507)]
-        self.CUSTOM_RIGHT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] =  [(49.7789, 0.0, 90.607, 0.0, 0.0), (7.2389, 14.1914, 165.824, 0.0735, -0.0617), (5.6635, -0.2856, 136.878, 0.1797, 0.2612), (0.7673, 24.3103, 5.875, 0.5982, 0.0612), (-1.1262, -12.1448, 85.99, 0.2405, 0.019), (-5.0331, 9.6253, 48.578, 0.625, 0.4938), (-17.194, 18.044, 7.491, 0.985, 0.1307), (-17.451, -2.6793, 53.843, 0.5495, 0.6667), (-27.949, 26.1856, 3.103, 0.749, 0.0835), (-26.6065, -17.2931, -31.572, 0.852, -0.5235), (-24.2801, 13.6549, 12.76, 0.9752, 0.2208)]
-        self.CUSTOM_BODY_ANGLES =  [90.356, 1.776, 10.179, -10.685, 25.46, 25.515, -10.551, 2.413, -18.357, 49.841, 12.983, 90.607, 165.824, 136.878, 5.875, 85.99, 48.578, 7.491, 53.843, 3.103, -31.572, 12.76]
+        self.DEFAULT_BALL = (0.0, 0.0, 0.0, 0.0)
+        self.DEFAULT_LEFT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = [
+            (-49.7789, 0.0261, -0.03, 0.0, 0.0),
+            (-9.1964, 4.7170, -27.154, 0.0, 0.0),
+            (-9.1964, -4.7170, 27.154, 0.0, 0.0),
+            (-12.2884, 5.0000, -22.141, 0.0, 0.0),
+            (-12.2884, -5.0000, 22.141, 0.0, 0.0),
+            (-11.1898, 15.5762, -54.307, 0.0, 0.0),
+            (-11.1898, -15.5762, 54.307, 0.0, 0.0),
+            (-7.9027, 8.0888, -45.667, 0.0, 0.0),
+            (-7.9027, -8.0888, 45.667, 0.0, 0.0),
+            (-2.1420, 11.7958, -79.708, 0.0, 0.0),
+            (-2.1420, -11.7958, 79.708, 0.0, 0.0),
+        ]
+        self.DEFAULT_RIGHT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = [
+            (49.7789, 0.0261, -179.970, 0.0, 0.0),
+            (9.1964, 4.7170, -152.846, 0.0, 0.0),
+            (9.1964, -4.7170, 152.846, 0.0, 0.0),
+            (12.2884, 5.0000, -157.859, 0.0, 0.0),
+            (12.2884, -5.0000, 157.859, 0.0, 0.0),
+            (11.1898, 15.5762, -125.693, 0.0, 0.0),
+            (11.1898, -15.5762, 125.693, 0.0, 0.0),
+            (7.9027, 8.0888, -134.333, 0.0, 0.0),
+            (7.9027, -8.0888, 134.333, 0.0, 0.0),
+            (2.1420, 11.7958, -100.292, 0.0, 0.0),
+            (2.1420, -11.7958, 100.292, 0.0, 0.0),
+        ]
+        self.DEFAULT_BODY_ANGLES = [
+            -0.03,
+            -27.154,
+            27.154,
+            -22.141,
+            22.141,
+            -54.307,
+            54.307,
+            -45.667,
+            45.667,
+            -79.708,
+            79.708,
+            -179.970,
+            -152.846,
+            152.846,
+            -157.859,
+            157.859,
+            -125.693,
+            125.693,
+            -134.333,
+            134.333,
+            -100.292,
+            100.292,
+        ]
+        self.DEFAULT_3V3_LEFT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = [
+            (-49.7789, 0.0261, -0.03, 0.0, 0.0),
+            (-12.2884, 0.0, 0.0, 0.0, 0.0),
+            (-2.1420, 0.0, 0.0, 0.0, 0.0),
+        ]
+        self.DEFAULT_3V3_RIGHT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = [
+            (49.7789, 0.0261, -179.970, 0.0, 0.0),
+            (12.2884, 0.0, -180.0, 0.0, 0.0),
+            (2.1420, 0.0, -180.0, 0.0, 0.0),
+        ]
+        self.DEFAULT_3V3_BODY_ANGLES = [
+            -0.03,
+            0.0,
+            0.0,
+            -179.970,
+            -180.0,
+            -180.0,
+        ]
+
+        self.CUSTOM_BALL = self.DEFAULT_BALL
+        self.CUSTOM_LEFT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = list(
+            self.DEFAULT_LEFT_PLAYERS
+        )
+        self.CUSTOM_RIGHT_PLAYERS: Sequence[Tuple[float, float, float, float, float]] = list(
+            self.DEFAULT_RIGHT_PLAYERS
+        )
+        self.CUSTOM_BODY_ANGLES = list(self.DEFAULT_BODY_ANGLES)
+           
+        self.CUSTOM_LEFT_PLAYERS, self.CUSTOM_RIGHT_PLAYERS = (
+            self._get_custom_players_for_current_config()
+        )
+        self.CUSTOM_BODY_ANGLES = self._get_custom_body_angles_for_current_config()
         
         (
             self.coach_shms,
@@ -80,9 +154,11 @@ class Agents:
         self._mask_buf = np.empty((len(self.player_list), self.n_actions),dtype=np.int32,)
         
         self.kickable = False
+        self.opponent_kickable = False
+        self.ball_owner_team = 0
         self.kickable_threshold = 1.085
 
-        self.epv_grid = self._load_epv_grid()
+        self.epv_grid = self._load_epv_grid() if self.config.useMaxEpv else None
         self.current_epv = 0.0
         self.max_episode_epv = 0.0
 
@@ -163,6 +239,8 @@ class Agents:
         if position is None:
             state = self.state(norm=False)
             position = (float(state[0]), float(state[1]))
+        if self.epv_grid is None:
+            return 0.0
 
         x, y = position
         field_length = float(self.config.half_length) * 2.0
@@ -185,12 +263,16 @@ class Agents:
         return float(epv[iy, ix])
 
     def reset_episode_epv(self) -> float:
+        if not self.config.useMaxEpv:
+            self.current_epv = 0.0
+            self.max_episode_epv = 0.0
+            return self.max_episode_epv
         self.current_epv = self.get_ball_position_epv()
         self.max_episode_epv = self.current_epv
         return self.max_episode_epv
 
     def update_episode_epv(self) -> float:
-        if not self.kickable:
+        if not self.config.useMaxEpv or not self.kickable:
             return self.max_episode_epv
 
         self.current_epv = self.get_ball_position_epv()
@@ -486,6 +568,8 @@ class Agents:
 
         team1_slots = players[:11]
         team1_players = team1_slots[:self.config.n1]
+        team2_slots = players[11:22]
+        team2_players = team2_slots[:self.config.n2]
 
         px = team1_players[:, 0]
         py = team1_players[:, 1]
@@ -497,11 +581,22 @@ class Agents:
         self.agent_mask[:] = False
         self.agent_mask[nearest_idx] = True
 
-        if len(sorted_idx) > 0:
-            nearest_dist = float(dists[sorted_idx[0]])
-            self.kickable = (nearest_dist <= self.kickable_threshold)
+        team1_min_dist = float(dists[sorted_idx[0]]) if len(sorted_idx) > 0 else np.inf
+
+        opp_x = team2_players[:, 0]
+        opp_y = team2_players[:, 1]
+        opp_dists = np.sqrt((opp_x - bx) ** 2 + (opp_y - by) ** 2)
+        team2_min_dist = float(np.min(opp_dists)) if opp_dists.size > 0 else np.inf
+
+        self.kickable = bool(team1_min_dist <= self.kickable_threshold)
+        self.opponent_kickable = bool(team2_min_dist <= self.kickable_threshold)
+
+        if self.kickable and (not self.opponent_kickable or team1_min_dist <= team2_min_dist):
+            self.ball_owner_team = 1
+        elif self.opponent_kickable:
+            self.ball_owner_team = 2
         else:
-            self.kickable = False
+            self.ball_owner_team = 0
 
         return self.agent_mask.copy()
 
@@ -568,6 +663,12 @@ class Agents:
         """
         从固定 11v11 默认模板中，截取当前 n1/n2 需要的真实球员。
         """
+        if self.config.n1 == 3 and self.config.n2 == 3:
+            return (
+                list(self.DEFAULT_3V3_LEFT_PLAYERS),
+                list(self.DEFAULT_3V3_RIGHT_PLAYERS),
+            )
+
         left_players = list(self.DEFAULT_LEFT_PLAYERS[:self.config.n1])
         right_players = list(self.DEFAULT_RIGHT_PLAYERS[:self.config.n2])
         return left_players, right_players
@@ -582,6 +683,15 @@ class Agents:
 
         所以这里只需要按当前 n1/n2 截取并拼接。
         """
+        if self.config.n1 == 3 and self.config.n2 == 3:
+            out = np.asarray(self.DEFAULT_3V3_BODY_ANGLES, dtype=np.float32)
+            expected = self.config.n1 + self.config.n2
+            if out.shape != (expected,):
+                raise ValueError(
+                    f"default 3v3 body angles shape mismatch: got {out.shape}, expected ({expected},)"
+                )
+            return out
+
         angles = np.asarray(self.DEFAULT_BODY_ANGLES, dtype=np.float32)
 
         left_angles = angles[:11][:self.config.n1]
@@ -593,6 +703,27 @@ class Agents:
         if out.shape != (expected,):
             raise ValueError(
                 f"default body angles shape mismatch: got {out.shape}, expected ({expected},)"
+            )
+
+        return out
+
+    def _get_custom_players_for_current_config(self):
+        left_players = list(self.CUSTOM_LEFT_PLAYERS[:self.config.n1])
+        right_players = list(self.CUSTOM_RIGHT_PLAYERS[:self.config.n2])
+        return left_players, right_players
+
+    def _get_custom_body_angles_for_current_config(self):
+        angles = np.asarray(self.CUSTOM_BODY_ANGLES, dtype=np.float32)
+
+        left_angles = angles[:11][:self.config.n1]
+        right_angles = angles[11:22][:self.config.n2]
+
+        out = np.concatenate([left_angles, right_angles], axis=0)
+
+        expected = self.config.n1 + self.config.n2
+        if out.shape != (expected,):
+            raise ValueError(
+                f"custom body angles shape mismatch: got {out.shape}, expected ({expected},)"
             )
 
         return out

@@ -229,7 +229,8 @@ Bhv_SetPlayKickOff::doKickWait( PlayerAgent * agent )
         return true;
     }
 
-    if ( wm.teammatesFromSelf().size() < 9 )
+    // if ( wm.teammatesFromSelf().size() < 9 )
+    if ( wm.teammatesFromSelf().empty() )
     {
         agent->debugClient().addMessage( "FreeKick:Wait%d", real_set_play_count );
         dlog.addText( Logger::TEAM,

@@ -272,6 +272,7 @@ def launch_players(
     team2: str,
     n1: int,
     n2: int,
+    opponent_level: float = 1.0,
     # only players in this mapping get --shm-name
     # key: (team_idx, unum) -> shm_name
     player_shm_by_key: Dict[Tuple[int, int], str],
@@ -303,6 +304,9 @@ def launch_players(
             "--mode", str(mode),
             "--server_wait_seconds", str(int(server_wait_seconds)),
         ]
+
+        if int(team_idx) == 2:
+            args += ["--level", str(float(opponent_level))]
 
         shm_name = player_shm_by_key.get((team_idx, int(unum)))
         if shm_name is not None:

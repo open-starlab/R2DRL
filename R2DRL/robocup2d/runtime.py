@@ -158,6 +158,7 @@ class Runtime:
             team2=self.config.team2,
             n1=self.config.n1,
             n2=self.config.n2,
+            opponent_level=self.config.opponent_level,
             player_shm_by_key=self.player_shm_ids,
             logs_dir=self.log_dir,
             env=env,
