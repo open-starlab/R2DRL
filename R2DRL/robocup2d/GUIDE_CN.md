@@ -1,5 +1,6 @@
 # RoboCup2D 环境中文说明指南与操作手册
 
+
 本文档面向这个仓库中的 `pymarl/src/envs/robocup2d` 环境实现，目标是把“这个环境是什么、能做什么、怎么配、怎么跑、怎么看结果、出了问题怎么查”讲清楚，尽量做到拿来即用。
 
 ## 1. 环境概览
@@ -118,9 +119,10 @@ pymarl/src/envs/robocup2d/config/
   - `robocup_benchmark_full_match_hard_epv.yaml`
   - `r2drl_scenario_easy.yaml`
   - `r2drl_scenario_medium.yaml`
-  - `r2drl_scenario_hard.yaml`
   - `robocup_benchmark_actionspace_easy_base.yaml`
   - `robocup_benchmark_actionspace_easy_hybrid.yaml`
+  - `r2drl_benchmark_actionspace_easy_base.yaml`
+  - `r2drl_benchmark_actionspace_easy_hybrid.yaml`
 
 虽然文件已经挪到环境目录里，但命令行仍然可以继续用：
 
@@ -150,10 +152,9 @@ python main.py --env-config=robocup_benchmark_full_match_easy
 
 - `opponent_level`
   - 通过底层球员进程的 `--level` 参数传给对手
-  - 当前 benchmark 约定：
-    - `easy = 0.3`
-    - `medium = 0.6`
-    - `hard = 0.9`
+  - 当前 benchmark 约定要按实验类型区分：
+    - `11vs11 full-match`: `easy = 0.05`, `medium = 0.5`, `hard = 1.0`
+    - `3vs3 scenario`: easy / middle / hard 这组 preset 目前都固定为 `0.05`
 
 说明：
 
@@ -445,7 +446,6 @@ python main.py --config=qmix --env-config=parallelr2drl
 
 ```bash
 python main.py --config=qmix --env-config=r2drl_scenario_medium
-python main.py --config=qmix --env-config=r2drl_scenario_hard
 ```
 
 ### 11.3 继续训练或做评估
@@ -463,6 +463,88 @@ python main.py \
 如果只想加载最近 checkpoint，一般保留：
 
 - `--load_step=0`
+
+### 11.4 13 组基准实验清单
+
+下面这 13 组实验可以直接作为当前环境的标准 benchmark 矩阵。
+
+#### 11vs11 全场基准实验
+
+```bash
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_epv
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_medium
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_medium_epv
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_hard
+python main.py --config=qmix --env-config=robocup_benchmark_full_match_hard_epv
+```
+
+对应关系：
+
+- `robocup_benchmark_full_match_easy`
+  - 简单对手 + Scoring
+- `robocup_benchmark_full_match_easy_epv`
+  - 简单对手 + Scoring + MaxEPV
+- `robocup_benchmark_full_match_medium`
+  - 中等对手 + Scoring
+- `robocup_benchmark_full_match_medium_epv`
+  - 中等对手 + Scoring + MaxEPV
+- `robocup_benchmark_full_match_hard`
+  - 困难对手 + Scoring
+- `robocup_benchmark_full_match_hard_epv`
+  - 困难对手 + Scoring + MaxEPV
+
+#### 3vs3 场景基准实验
+
+```bash
+python main.py --config=qmix --env-config=r2drl_scenario_easy
+python main.py --config=qmix --env-config=r2drl_scenario_medium
+```
+
+对应关系：
+
+- `r2drl_scenario_easy`
+  - easy 开局难度
+- `r2drl_scenario_medium`
+  - middle 开局难度
+
+共同设定：
+
+- 对手难度固定为 `easy`
+- 动作空间固定为 `Base`
+- `episode_limit: 300`
+
+#### 动作空间比较实验
+
+```bash
+python main.py --config=qmix --env-config=robocup_benchmark_actionspace_easy_base
+python main.py --config=qmix --env-config=robocup_benchmark_actionspace_easy_hybrid
+python main.py --config=qmix --env-config=r2drl_benchmark_actionspace_easy_base
+python main.py --config=qmix --env-config=r2drl_benchmark_actionspace_easy_hybrid
+```
+
+对应关系：
+
+- `robocup_benchmark_actionspace_easy_base`
+  - `11vs11` + `Base`
+- `robocup_benchmark_actionspace_easy_hybrid`
+  - `11vs11` + `Hybrid`
+- `r2drl_benchmark_actionspace_easy_base`
+  - `3vs3` + `Base`
+- `r2drl_benchmark_actionspace_easy_hybrid`
+  - `3vs3` + `Hybrid`
+
+推荐运行方式：
+
+- 做 `11vs11` 对手难度和奖励函数对比时，用 `robocup_benchmark_full_match_*`
+- 做 `3vs3` 开局难度对比时，用 `r2drl_scenario_*`
+- 做动作空间对比时，先跑 `Base`，再跑 `Hybrid`
+
+说明：
+
+- `Hybrid` 配置现在环境侧已经支持。
+- 但如果要完整训练 `Hybrid policy`，PyMARL 训练链路仍可能需要继续适配。
+- 所以如果你的目标是先把 benchmark 全部稳定跑通，建议先以 `Base` 为主。
 
 ## 12. Benchmark 说明
 
@@ -482,9 +564,9 @@ python main.py \
 比较维度：
 
 - 对手难度
-  - easy `0.3`
-  - medium `0.6`
-  - hard `0.9`
+  - easy `0.05`
+  - medium `0.5`
+  - hard `1.0`
 - reward
   - scoring reward
   - scoring reward + MaxEPV

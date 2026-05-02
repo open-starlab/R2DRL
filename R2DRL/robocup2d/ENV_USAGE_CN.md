@@ -140,19 +140,18 @@ scenario_difficulty: easy
 
 ### 3.2 easy / middle / hard 的含义
 
-当前三个 scenario benchmark 的核心区别是起点难度：
+当前保留的两个 trajectory-based scenario benchmark 的核心区别是起点难度：
 
 | 文件 | scenario_start | scenario_difficulty | bucket |
 |---|---|---|---|
 | `r2drl_scenario_easy.yaml` | easy | easy | 3 |
 | `r2drl_scenario_medium.yaml` | middle | middle | 15 |
-| `r2drl_scenario_hard.yaml` | hard | hard | 29 |
 
 这三个文件的对手状态目前都固定为：
 
 ```yaml
 opponent_state: easy
-opponent_level: 0.3
+opponent_level: 0.05
 ```
 
 所以 easy/middle/hard 不是对手难度，而是起始位置分布难度。
@@ -187,7 +186,6 @@ pymarl/src/envs/robocup2d/config/
 
 - `r2drl_scenario_easy.yaml`
 - `r2drl_scenario_medium.yaml`
-- `r2drl_scenario_hard.yaml`
 
 共同特点：
 
@@ -197,7 +195,7 @@ benchmark_mode: scenario
 n: 3
 team: Base
 opponent_state: easy
-opponent_level: 0.3
+opponent_level: 0.05
 use_custom_start: true
 terminate_on_goal: true
 terminate_on_possession_loss: true
@@ -218,7 +216,7 @@ useMaxEpv: false
 共同特点：
 
 ```yaml
-env: robocup
+env: parallelr2drl
 benchmark_mode: full_match
 n: 11
 team: Base
@@ -230,9 +228,9 @@ terminate_on_possession_loss: false
 区别：
 
 - easy/middle/hard 控制对手强度：
-  - easy: `opponent_level: 0.3`
-  - middle: `opponent_level: 0.6`
-  - hard: `opponent_level: 0.9`
+  - easy: `opponent_level: 0.05`
+  - middle: `opponent_level: 0.5`
+  - hard: `opponent_level: 1.0`
 - `_epv` 文件会设置：
   - `useMaxEpv: true`
 
@@ -240,8 +238,10 @@ terminate_on_possession_loss: false
 
 - `robocup_benchmark_actionspace_easy_base.yaml`
 - `robocup_benchmark_actionspace_easy_hybrid.yaml`
+- `r2drl_benchmark_actionspace_easy_base.yaml`
+- `r2drl_benchmark_actionspace_easy_hybrid.yaml`
 
-这两个配置用于比较 action space。
+这四个配置用于比较 action space。
 
 区别：
 
@@ -254,6 +254,13 @@ team: Base
 ```yaml
 team: Hybrid
 ```
+
+其中：
+
+- `robocup_benchmark_actionspace_easy_*`
+  - `11vs11` full-match
+- `r2drl_benchmark_actionspace_easy_*`
+  - `3vs3` scenario easy
 
 ## 5. 关键配置字段
 
@@ -318,16 +325,16 @@ team: Hybrid
 
 ```yaml
 opponent_state: easy
-opponent_level: 0.3
+opponent_level: 0.05
 ```
 
 `opponent_state` 是人读标签，`opponent_level` 是实际数值。
 
 常用约定：
 
-- easy: `0.3`
-- middle: `0.6`
-- hard: `0.9`
+- easy: `0.05`
+- middle: `0.5`
+- hard: `1.0`
 
 ### 5.6 use_custom_start
 
@@ -479,7 +486,7 @@ scenario_difficulty: hard
 
 ```yaml
 opponent_state: hard
-opponent_level: 0.9
+opponent_level: 1.0
 ```
 
 如果要改 action space，修改：

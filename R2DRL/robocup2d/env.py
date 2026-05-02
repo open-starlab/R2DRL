@@ -55,6 +55,9 @@ class ParallelR2DRL:
     def get_env_info(self):
         return self.env.get_env_info()
 
+    def get_stats(self):
+        return self.env.get_stats()
+
     def __getattr__(self, name):
         return getattr(self.env, name)
     
@@ -85,6 +88,11 @@ class R2DRL:
 
         self.global_episode = 0
         self.test_mode = False
+
+    def set_test_mode(self, test_mode: bool):
+        self.test_mode = bool(test_mode)
+        self.env.test_mode = self.test_mode
+        return True
 
     def reset(self, *args, **kwargs):
         self.env.test_mode = bool(self.test_mode)
@@ -120,6 +128,9 @@ class R2DRL:
 
     def get_env_info(self):
         return self.env.get_env_info()
+
+    def get_stats(self):
+        return self.env.get_stats()
 
     def __getattr__(self, name):
         return getattr(self.env, name)
@@ -168,6 +179,10 @@ class Robocup2dEnv:
         self._reset_mask_n = None
 
         print("self.config.use_custom_start", self.config.use_custom_start)
+
+    def set_test_mode(self, test_mode: bool):
+        self.test_mode = bool(test_mode)
+        return True
 
     def set_start_and_n(self, start, n_control):
         self._reset_start = copy.deepcopy(start)
@@ -359,3 +374,6 @@ class Robocup2dEnv:
             "obs_shape": int(P.player.STATE_NUM),
             "episode_limit": int(self.config.episode_limit),
         }
+
+    def get_stats(self):
+        return {}

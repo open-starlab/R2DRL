@@ -1,4 +1,4 @@
-env: robocup
+env: parallelr2drl
 env_args:
   host: localhost
   player_dir: /fsws1/h_qin/robocup/robocup/helios-base/src/player
@@ -50,6 +50,6 @@ env_args:
   init_n: 11
   team: Hybrid
   opponent_state: easy
-  opponent_level: 0.3
+  opponent_level: 0.05
   useMaxEpv: false
   tb_log_dir: ./runs/robocup_benchmark_actionspace_easy_hybrid

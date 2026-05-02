@@ -1132,15 +1132,10 @@ SamplePlayer::handlePlayerType()
 void
 SamplePlayer::communicationImpl()
 {
-
-    // if ( M_communication )
-    // {
-    //     M_communication->execute( this );
-    // }
-    // else
-    // {
-    // }
-    return;
+    if ( M_communication )
+    {
+        M_communication->execute( this );
+    }
 }
 
 
@@ -1825,7 +1820,7 @@ void SamplePlayer::takeAction(int n) {
         }
 
         case 2: {
-            move_behavior.doTackle(this);  // 内部会判断是否需要拦截
+            move_behavior.doTackle(this);  // 抢断/铲球
             break;
         }
 
@@ -2155,12 +2150,17 @@ bool SamplePlayer::initSharedMemory() {
 
 bool SamplePlayer::isDoCatchExecutable() const {
     const rcsc::WorldModel & wm = this->world();
+    const rcsc::ServerParam & SP = rcsc::ServerParam::i();
+
     return (!wm.self().isFrozen())
         && wm.self().goalie()
         && inOurPenaltyArea()
         && (wm.gameMode().type() == rcsc::GameMode::PlayOn
             || wm.gameMode().type() == rcsc::GameMode::PenaltyTaken_)
-        && wm.ball().rposValid();
+        && wm.ball().rposValid()
+        && wm.time().cycle()
+               > wm.self().catchTime().cycle() + SP.catchBanCycle()
+        && wm.ball().distFromSelf() < SP.catchableArea() - 0.05;
 }
 
 

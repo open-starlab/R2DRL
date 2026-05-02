@@ -47,21 +47,10 @@ env_args:
   terminate_on_possession_loss: true
   reward_on_possession_loss: 0.0
   tb: true
-  init_n: 2
-  trajectory_path: /fsws1/h_qin/robocup/robocup/pymarl/src/envs/robocup2d/trajectories/3v3trajectories_right_half_left_nearest_kickable.npz
-  start_window_size: 1
-  progress_bucket_count: 30
-  current_target_window_size: 1
-  num_selected_trajectories: 100
-  random_sample: false
-  scenario_difficulty_buckets:
-    easy: 3
-    middle: 15
-    hard: 29
+  init_n: 3
   team: Base
   opponent_state: easy
   opponent_level: 0.05
-  scenario_start: easy
-  scenario_difficulty: easy
+  scenario_start: default
   useMaxEpv: false
-  tb_log_dir: ./runs/r2drl_scenario_easy_n2
+  tb_log_dir: ./runs/r2drl_scenario_default_n3
