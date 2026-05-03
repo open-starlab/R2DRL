@@ -87,11 +87,11 @@ class ScenarioStartSampler:
         difficulty = str(difficulty).strip().lower()
         if difficulty == "":
             return None
-        if difficulty == "medium":
-            difficulty = "middle"
-        if difficulty not in ("easy", "middle", "hard"):
+        if difficulty == "middle":
+            difficulty = "medium"
+        if difficulty not in ("easy", "medium", "hard"):
             raise ValueError(
-                "scenario_difficulty must be one of: easy, middle/medium, hard; "
+                "scenario_difficulty must be one of: easy, medium/middle, hard; "
                 f"got {difficulty!r}"
             )
         return difficulty

@@ -111,7 +111,7 @@ num_selected_trajectories: 100
 random_sample: false
 scenario_difficulty_buckets:
   easy: 3
-  middle: 15
+    medium: 15
   hard: 29
 scenario_start: easy
 scenario_difficulty: easy
@@ -123,7 +123,7 @@ scenario_difficulty: easy
   - 起点轨迹文件
 - `scenario_difficulty`
   - 当前要采样的起点难度
-  - 可选：`easy`、`middle`、`hard`
+  - 可选：`easy`、`medium`、`hard`
 - `scenario_difficulty_buckets`
   - 难度名到 bucket index 的映射
   - bucket 是 `0..progress_bucket_count-1` 的 0-based index；如果按 30 个 bucket 对旧值取补，配置里应写 `29 - old_bucket`
@@ -138,23 +138,23 @@ scenario_difficulty: easy
 - `random_sample`
   - 是否随机选择轨迹子集
 
-### 3.2 easy / middle / hard 的含义
+### 3.2 easy / medium / hard 的含义
 
 当前保留的两个 trajectory-based scenario benchmark 的核心区别是起点难度：
 
 | 文件 | scenario_start | scenario_difficulty | bucket |
 |---|---|---|---|
-| `r2drl_scenario_easy.yaml` | easy | easy | 3 |
-| `r2drl_scenario_medium.yaml` | middle | middle | 15 |
+| `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off.yaml` | easy | easy | 3 |
+| `parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off.yaml` | medium | medium | 15 |
 
 这三个文件的对手状态目前都固定为：
 
 ```yaml
-opponent_state: easy
+opponent_state: lv1
 opponent_level: 0.05
 ```
 
-所以 easy/middle/hard 不是对手难度，而是起始位置分布难度。
+所以 easy/medium/hard 不是对手难度，而是起始位置分布难度。
 
 ## 4. YAML 配置文件
 
@@ -184,8 +184,8 @@ pymarl/src/envs/robocup2d/config/
 
 ### 4.2 Scenario benchmark
 
-- `r2drl_scenario_easy.yaml`
-- `r2drl_scenario_medium.yaml`
+- `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off.yaml`
+- `parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off.yaml`
 
 共同特点：
 
@@ -194,11 +194,11 @@ env: parallelr2drl
 benchmark_mode: scenario
 n: 3
 team: Base
-opponent_state: easy
+opponent_state: lv1
 opponent_level: 0.05
 use_custom_start: true
 terminate_on_goal: true
-terminate_on_possession_loss: true
+terminate_on_possession_loss: false
 useMaxEpv: false
 ```
 
@@ -206,12 +206,12 @@ useMaxEpv: false
 
 ### 4.3 Full match benchmark
 
-- `robocup_benchmark_full_match_easy.yaml`
-- `robocup_benchmark_full_match_medium.yaml`
-- `robocup_benchmark_full_match_hard.yaml`
-- `robocup_benchmark_full_match_easy_epv.yaml`
-- `robocup_benchmark_full_match_medium_epv.yaml`
-- `robocup_benchmark_full_match_hard_epv.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-on.yaml`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-on.yaml`
 
 共同特点：
 
@@ -227,19 +227,19 @@ terminate_on_possession_loss: false
 
 区别：
 
-- easy/middle/hard 控制对手强度：
+- lv1/lv2/lv3 控制对手强度：
   - easy: `opponent_level: 0.05`
-  - middle: `opponent_level: 0.5`
+  - lv2: `opponent_level: 0.5`
   - hard: `opponent_level: 1.0`
 - `_epv` 文件会设置：
   - `useMaxEpv: true`
 
 ### 4.4 Action space benchmark
 
-- `robocup_benchmark_actionspace_easy_base.yaml`
-- `robocup_benchmark_actionspace_easy_hybrid.yaml`
-- `r2drl_benchmark_actionspace_easy_base.yaml`
-- `r2drl_benchmark_actionspace_easy_hybrid.yaml`
+- `parallelr2drl_11vs11actionspace_team-base_opp-lv1_epv-off.yaml`
+- `parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off.yaml`
+- `parallelr2drl_3vs3actionspace_team-base_init-1_start-easy_opp-lv1_epv-off.yaml`
+- `parallelr2drl_3vs3actionspace_team-hybrid_init-1_start-easy_opp-lv1_epv-off.yaml`
 
 这四个配置用于比较 action space。
 
@@ -257,10 +257,10 @@ team: Hybrid
 
 其中：
 
-- `robocup_benchmark_actionspace_easy_*`
-  - `11vs11` full-match
-- `r2drl_benchmark_actionspace_easy_*`
-  - `3vs3` scenario easy
+- `parallelr2drl_11vs11actionspace_*`
+  - `11vs11` action-space benchmark
+- `parallelr2drl_3vs3actionspace_*`
+  - `3vs3` action-space benchmark with easy start
 
 ## 5. 关键配置字段
 
@@ -324,7 +324,7 @@ team: Hybrid
 ### 5.5 opponent_state / opponent_level
 
 ```yaml
-opponent_state: easy
+opponent_state: lv1
 opponent_level: 0.05
 ```
 
@@ -333,7 +333,7 @@ opponent_level: 0.05
 常用约定：
 
 - easy: `0.05`
-- middle: `0.5`
+- lv2: `0.5`
 - hard: `1.0`
 
 ### 5.6 use_custom_start
@@ -374,19 +374,19 @@ terminate_on_goal: true
 
 进球或丢球后是否终止 episode。
 
-scenario benchmark 通常设为 `true`。
+scenario benchmark 现在默认设为 `false`。
 
 full match benchmark 通常设为 `false`。
 
 ### 5.9 terminate_on_possession_loss
 
 ```yaml
-terminate_on_possession_loss: true
+terminate_on_possession_loss: false
 ```
 
 如果右队获得球权，是否终止 episode。
 
-scenario benchmark 通常设为 `true`。
+scenario benchmark 现在默认设为 `false`。
 
 ### 5.10 trajectory_path
 
@@ -443,19 +443,19 @@ conda activate marl
 运行一个 scenario benchmark：
 
 ```bash
-python -u main.py --config=qmix --env-config=r2drl_scenario_easy --capture=no
+python -u main.py --config=qmix --env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off --capture=no
 ```
 
 运行 full match benchmark：
 
 ```bash
-python -u main.py --config=qmix --env-config=robocup_benchmark_full_match_easy --capture=no
+python -u main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off --capture=no
 ```
 
 运行 MaxEPV full match：
 
 ```bash
-python -u main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_epv --capture=no
+python -u main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on --capture=no
 ```
 
 ## 8. 如何新增实验 YAML
@@ -465,14 +465,14 @@ python -u main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_e
 新增实验时建议从最接近的文件复制一份，例如：
 
 ```bash
-cp r2drl_scenario_easy.yaml r2drl_scenario_easy_maxepv.yaml
+cp parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off.yaml parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-on.yaml
 ```
 
 然后修改：
 
 ```yaml
 useMaxEpv: true
-tb_log_dir: ./runs/r2drl_scenario_easy_maxepv
+tb_log_dir: ./runs/parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-on
 ```
 
 如果要改 scenario 起点难度，修改：
@@ -485,7 +485,7 @@ scenario_difficulty: hard
 如果要改对手强度，修改：
 
 ```yaml
-opponent_state: hard
+opponent_state: lv3
 opponent_level: 1.0
 ```
 

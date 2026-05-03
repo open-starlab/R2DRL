@@ -41,7 +41,7 @@ env_args:
   episode_limit: 300
   half_time: 6000000
   seed: 42
-  game_logging: true
+  game_logging: false
   use_custom_start: true
   tb: true
   init_n: 3

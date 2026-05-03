@@ -3,7 +3,7 @@
 This environment now supports two benchmark episode styles:
 
 - `full-match`: keep playing after goals and report final `score_diff` at timeout.
-- `scenario`: terminate on goal, possession loss, or timeout and report `success`.
+- `scenario`: terminate on goal or timeout and report `success`.
 
 ## 1. Full-match Benchmark (11vs11)
 
@@ -19,9 +19,9 @@ Shared setup:
 Variants:
 
 - Opponent difficulty:
-  - easy: `--env-config=robocup_benchmark_full_match_easy` with baked-in `opponent_level=0.05`
-  - medium: `--env-config=robocup_benchmark_full_match_medium` with baked-in `opponent_level=0.5`
-  - hard: `--env-config=robocup_benchmark_full_match_hard` with baked-in `opponent_level=1.0`
+  - lv1: `--env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off` with baked-in `opponent_level=0.05`
+  - lv2: `--env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off` with baked-in `opponent_level=0.5`
+  - lv3: `--env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off` with baked-in `opponent_level=1.0`
 - Reward:
   - scoring reward only: `*_full_match_{easy|medium|hard}`
   - scoring reward + MaxEPV: `*_full_match_{easy|medium|hard}_epv`
@@ -50,8 +50,8 @@ Shared setup:
 
 Variants:
 
-- easy: `--env-config=r2drl_scenario_easy` with baked-in `opponent_level=0.05`
-- medium: `--env-config=r2drl_scenario_medium` with baked-in `opponent_level=0.05`
+- easy: `--env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off` with baked-in `opponent_level=0.05`
+- medium: `--env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off` with baked-in `opponent_level=0.05`
 
 Expected logs:
 
@@ -65,29 +65,29 @@ Goal: compare action-space choices under the same benchmark conditions across en
 
 Shared setup:
 
-- easy opponent with baked-in `opponent_level=0.05`
+- lv1 opponent with baked-in `opponent_level=0.05`
 - compare `Base` vs `Hybrid`
 
 Variants:
 
 - 11vs11 full match:
-  - base action space: `--env-config=robocup_benchmark_actionspace_easy_base`
-  - hybrid action space: `--env-config=robocup_benchmark_actionspace_easy_hybrid`
+  - base action space: `--env-config=parallelr2drl_11vs11actionspace_team-base_opp-lv1_epv-off`
+  - hybrid action space: `--env-config=parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off`
 - 3vs3 scenario:
-  - base action space: `--env-config=r2drl_benchmark_actionspace_easy_base`
-  - hybrid action space: `--env-config=r2drl_benchmark_actionspace_easy_hybrid`
+  - base action space: `--env-config=parallelr2drl_3vs3actionspace_team-base_init-1_start-easy_opp-lv1_epv-off`
+  - hybrid action space: `--env-config=parallelr2drl_3vs3actionspace_team-hybrid_init-1_start-easy_opp-lv1_epv-off`
 
 Note:
 
 - The RoboCup2D environment already exposes both action spaces.
-- The 3vs3 action-space presets keep the same conditions as `r2drl_scenario_easy`: easy start, easy opponent, `episode_limit: 300`.
+- The 3vs3 action-space presets keep the same conditions as `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off`: easy start, lv1 opponent, `episode_limit: 300`.
 - The default PyMARL training pipeline in this repository still stores actions as a single discrete index, so the `hybrid` benchmark preset is environment-ready but not yet end-to-end trainable without controller, buffer, and runner changes.
 
 Suggested command pattern:
 
 ```bash
 cd /fsws1/h_qin/robocup/robocup/pymarl/src
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off
 ```
 
-For evaluation, use the same `--env-config` together with your normal checkpoint-loading flags. You do not need to pass an extra difficulty override each time because the benchmark presets already bake in the easy/medium/hard `opponent_level` values. The runner will now emit benchmark-friendly terminal stats directly from the environment.
+For evaluation, use the same `--env-config` together with your normal checkpoint-loading flags. You do not need to pass an extra difficulty override each time because the benchmark presets already bake in the lv1/lv2/lv3 `opponent_level` values. The runner will now emit benchmark-friendly terminal stats directly from the environment.

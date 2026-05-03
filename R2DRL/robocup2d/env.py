@@ -177,6 +177,7 @@ class Robocup2dEnv:
         self.test_mode = False
         self._reset_start = None
         self._reset_mask_n = None
+        self._last_terminal_reason = "init"
 
         print("self.config.use_custom_start", self.config.use_custom_start)
 
@@ -232,7 +233,10 @@ class Robocup2dEnv:
     def reset(self):
         self.turn_count += 1
 
-        if self._need_restart or (not self.runtime.has_live_procs()):
+        did_restart = self._need_restart or (not self.runtime.has_live_procs())
+        prev_terminal_reason = self._last_terminal_reason
+
+        if did_restart:
             self._need_restart = False
             self.restart()
             print("restart!!")
@@ -249,12 +253,20 @@ class Robocup2dEnv:
         if not self.agents.wait_all_ready():
             raise P.common.ShmProtocolError("Not READY Before Reset!!")
         # print(f"[RESET] turn={self.turn_count}, score=[{self.score[0]},{self.score[1]}], cycle={cycle}")
-        
+
+        should_reposition = (
+            did_restart
+            or prev_terminal_reason == "timeout"
+        )
+
         if self.config.use_custom_start:
-            self.agents.reset_custom()
+            if should_reposition:
+                self.agents.reset_custom()
         else:
-            if self.turn_count > 1 and int(goal) == 0:
+            if should_reposition:
                 self.agents.reset_default()
+
+        self._last_terminal_reason = "running"
 
         self.agents.coach.clear_goal_flag()
 
@@ -341,7 +353,9 @@ class Robocup2dEnv:
             "possession_loss": possession_loss,
             "max_episode_epv": float(self.agents.max_episode_epv),
             "useMaxEpv": int(self.config.useMaxEpv),
+            "terminal_reason": terminal_reason,
         }
+        self._last_terminal_reason = terminal_reason
         return float(reward), bool(self.done), info
 
     def get_obs(self):

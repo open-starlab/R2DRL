@@ -111,23 +111,23 @@ pymarl/src/envs/robocup2d/config/
   - `r2drl.yaml`
   - `parallelr2drl.yaml`
 - benchmark 配置
-  - `robocup_benchmark_full_match_easy.yaml`
-  - `robocup_benchmark_full_match_easy_epv.yaml`
-  - `robocup_benchmark_full_match_medium.yaml`
-  - `robocup_benchmark_full_match_medium_epv.yaml`
-  - `robocup_benchmark_full_match_hard.yaml`
-  - `robocup_benchmark_full_match_hard_epv.yaml`
-  - `r2drl_scenario_easy.yaml`
-  - `r2drl_scenario_medium.yaml`
-  - `robocup_benchmark_actionspace_easy_base.yaml`
-  - `robocup_benchmark_actionspace_easy_hybrid.yaml`
-  - `r2drl_benchmark_actionspace_easy_base.yaml`
-  - `r2drl_benchmark_actionspace_easy_hybrid.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-on.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off.yaml`
+  - `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-on.yaml`
+  - `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_11vs11actionspace_team-base_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_3vs3actionspace_team-base_init-1_start-easy_opp-lv1_epv-off.yaml`
+  - `parallelr2drl_3vs3actionspace_team-hybrid_init-1_start-easy_opp-lv1_epv-off.yaml`
 
 虽然文件已经挪到环境目录里，但命令行仍然可以继续用：
 
 ```bash
-python main.py --env-config=robocup_benchmark_full_match_easy
+python main.py --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off
 ```
 
 因为 `main.py` 已经改成会优先去 `envs/robocup2d/config/` 里找这些配置。
@@ -154,7 +154,7 @@ python main.py --env-config=robocup_benchmark_full_match_easy
   - 通过底层球员进程的 `--level` 参数传给对手
   - 当前 benchmark 约定要按实验类型区分：
     - `11vs11 full-match`: `easy = 0.05`, `medium = 0.5`, `hard = 1.0`
-    - `3vs3 scenario`: easy / middle / hard 这组 preset 目前都固定为 `0.05`
+    - `3vs3 scenario`: easy / medium / hard 这组 preset 目前都固定为 `0.05`
 
 说明：
 
@@ -344,7 +344,7 @@ use_custom_start: false
 大体思路：
 
 - 从处理后的 3v3 轨迹文件里取起始状态
-- 用 `scenario_difficulty` 选择 easy / middle / hard 对应的轨迹进度 bucket
+- 用 `scenario_difficulty` 选择 easy / medium / hard 对应的轨迹进度 bucket
 - 用 `init_n` 决定初始控制最近的多少名球员
 - reset 前把采样出的起点和控制人数写入底层环境
 
@@ -367,7 +367,7 @@ use_custom_start: false
 - `init_n`
   - 初始控制人数
 - `scenario_difficulty`
-  - 起点难度，可选 `easy`、`middle` / `medium`、`hard`
+  - 起点难度，可选 `easy`、`medium`、`hard`
 - `scenario_difficulty_buckets`
   - 把难度映射到轨迹进度 bucket
 
@@ -414,26 +414,26 @@ cd /fsws1/h_qin/robocup/robocup/pymarl/src
 ### 11.1 跑 11vs11 full-match benchmark
 
 ```bash
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off
 ```
 
 Medium / Hard 只需要切换 `env-config`：
 
 ```bash
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_medium
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_hard
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off
 ```
 
 如果要打开 EPV shaping 版本：
 
 ```bash
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_epv
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on
 ```
 
 ### 11.2 跑 3vs3 scenario benchmark
 
 ```bash
-python main.py --config=qmix --env-config=r2drl_scenario_easy
+python main.py --config=qmix --env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off
 ```
 
 或者并行训练版本：
@@ -445,7 +445,7 @@ python main.py --config=qmix --env-config=parallelr2drl
 如果你想明确跑 benchmark 预设，建议直接用：
 
 ```bash
-python main.py --config=qmix --env-config=r2drl_scenario_medium
+python main.py --config=qmix --env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off
 ```
 
 ### 11.3 继续训练或做评估
@@ -455,7 +455,7 @@ python main.py --config=qmix --env-config=r2drl_scenario_medium
 ```bash
 python main.py \
   --config=qmix \
-  --env-config=robocup_benchmark_full_match_easy \
+  --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off \
   --checkpoint_path=results/models/你的实验目录 \
   --evaluate=True
 ```
@@ -471,73 +471,73 @@ python main.py \
 #### 11vs11 全场基准实验
 
 ```bash
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_easy_epv
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_medium
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_medium_epv
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_hard
-python main.py --config=qmix --env-config=robocup_benchmark_full_match_hard_epv
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-on
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-on
 ```
 
 对应关系：
 
-- `robocup_benchmark_full_match_easy`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off`
   - 简单对手 + Scoring
-- `robocup_benchmark_full_match_easy_epv`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-on`
   - 简单对手 + Scoring + MaxEPV
-- `robocup_benchmark_full_match_medium`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-off`
   - 中等对手 + Scoring
-- `robocup_benchmark_full_match_medium_epv`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-on`
   - 中等对手 + Scoring + MaxEPV
-- `robocup_benchmark_full_match_hard`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-off`
   - 困难对手 + Scoring
-- `robocup_benchmark_full_match_hard_epv`
+- `parallelr2drl_11vs11fullmatch_team-base_opp-lv3_epv-on`
   - 困难对手 + Scoring + MaxEPV
 
 #### 3vs3 场景基准实验
 
 ```bash
-python main.py --config=qmix --env-config=r2drl_scenario_easy
-python main.py --config=qmix --env-config=r2drl_scenario_medium
+python main.py --config=qmix --env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off
 ```
 
 对应关系：
 
-- `r2drl_scenario_easy`
+- `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off`
   - easy 开局难度
-- `r2drl_scenario_medium`
-  - middle 开局难度
+- `parallelr2drl_3vs3scenario_team-base_init-1_start-medium_opp-lv1_epv-off`
+  - medium 开局难度
 
 共同设定：
 
-- 对手难度固定为 `easy`
+- 对手难度固定为 `lv1`
 - 动作空间固定为 `Base`
 - `episode_limit: 300`
 
 #### 动作空间比较实验
 
 ```bash
-python main.py --config=qmix --env-config=robocup_benchmark_actionspace_easy_base
-python main.py --config=qmix --env-config=robocup_benchmark_actionspace_easy_hybrid
-python main.py --config=qmix --env-config=r2drl_benchmark_actionspace_easy_base
-python main.py --config=qmix --env-config=r2drl_benchmark_actionspace_easy_hybrid
+python main.py --config=qmix --env-config=parallelr2drl_11vs11actionspace_team-base_opp-lv1_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_3vs3actionspace_team-base_init-1_start-easy_opp-lv1_epv-off
+python main.py --config=qmix --env-config=parallelr2drl_3vs3actionspace_team-hybrid_init-1_start-easy_opp-lv1_epv-off
 ```
 
 对应关系：
 
-- `robocup_benchmark_actionspace_easy_base`
+- `parallelr2drl_11vs11actionspace_team-base_opp-lv1_epv-off`
   - `11vs11` + `Base`
-- `robocup_benchmark_actionspace_easy_hybrid`
+- `parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off`
   - `11vs11` + `Hybrid`
-- `r2drl_benchmark_actionspace_easy_base`
+- `parallelr2drl_3vs3actionspace_team-base_init-1_start-easy_opp-lv1_epv-off`
   - `3vs3` + `Base`
-- `r2drl_benchmark_actionspace_easy_hybrid`
+- `parallelr2drl_3vs3actionspace_team-hybrid_init-1_start-easy_opp-lv1_epv-off`
   - `3vs3` + `Hybrid`
 
 推荐运行方式：
 
-- 做 `11vs11` 对手难度和奖励函数对比时，用 `robocup_benchmark_full_match_*`
-- 做 `3vs3` 开局难度对比时，用 `r2drl_scenario_*`
+- 做 `11vs11` 对手难度和奖励函数对比时，用 `parallelr2drl_11vs11fullmatch_*`
+- 做 `3vs3` 开局难度对比时，用 `parallelr2drl_3vs3scenario_*`
 - 做动作空间对比时，先跑 `Base`，再跑 `Hybrid`
 
 说明：
@@ -742,9 +742,9 @@ results/tb_logs/<unique_token>/
 
 如果你想快速开始，我建议按下面顺序：
 
-1. 先用 `robocup_benchmark_full_match_easy`
+1. 先用 `parallelr2drl_11vs11fullmatch_team-base_opp-lv1_epv-off`
    - 确认 11vs11 全场能稳定跑起来
-2. 再用 `r2drl_scenario_easy`
+2. 再用 `parallelr2drl_3vs3scenario_team-base_init-1_start-easy_opp-lv1_epv-off`
    - 确认 scenario 起点采样能正常工作
 3. 然后切到 `medium` 和 `hard`
    - 看难度提升后的指标变化

@@ -148,11 +148,11 @@ class EnvConfig:
         )
         if self.scenario_difficulty is not None:
             scenario_difficulty = self.scenario_difficulty.strip().lower()
-            if scenario_difficulty == "medium":
-                scenario_difficulty = "middle"
-            if scenario_difficulty not in ("easy", "middle", "hard"):
+            if scenario_difficulty == "middle":
+                scenario_difficulty = "medium"
+            if scenario_difficulty not in ("easy", "medium", "hard"):
                 raise ValueError(
-                    "scenario_difficulty must be one of: easy, middle/medium, hard; "
+                    "scenario_difficulty must be one of: easy, medium/middle, hard; "
                     f"got {self.scenario_difficulty!r}"
                 )
             self.scenario_difficulty = scenario_difficulty

@@ -41,7 +41,7 @@ env_args:
   episode_limit: 300
   half_time: 60000000
   seed: 123
-  game_logging: true
+  game_logging: false
   use_custom_start: true
   tb: true
   init_n: 1
@@ -49,7 +49,7 @@ env_args:
   progress_bucket_count: 100
   current_target_window_size: 3
   team: Base
-  opponent_state: default
+  opponent_state: lv3
   opponent_level: 1.0
   useMaxEpv: false
   tb_log_dir: ./runs/robocup
