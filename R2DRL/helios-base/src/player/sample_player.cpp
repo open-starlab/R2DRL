@@ -1827,7 +1827,7 @@ void SamplePlayer::takeAction(int n) {
         }
 
         case 2: {
-            move_behavior.doTackle(this);  // 抢断/铲球
+            move_behavior.doIntercept(this);  // 追球/拦截
             break;
         }
 
@@ -2007,20 +2007,20 @@ void SamplePlayer::setActionMask() {
     // 1 射门
     action_mask[1] = isDoShootExecutable();
 
-    // 2 追球：只要自己不能踢球，就允许追球
-    action_mask[2] = !wm.self().isKickable();
+    // 2 追球：使用现成的 intercept 可执行条件
+    action_mask[2] = move_behavior.isInterceptExcutable(this);
 
     // 3 解围
     // action_mask[3] = advance_ball_action.isExecutable(this);
     action_mask[3] = false;
 
 
-    // 4–6: 各种传球（暂时共用 isExecutable）
-    action_mask[4] = pass_action.isExecutable(this);  // Direct Pass
+    // 4–6: 各种传球使用各自的可执行判断，避免 mask 过粗
+    action_mask[4] = pass_action.isDirectPassExecutable(this);   // Direct Pass
 
-    action_mask[5] = pass_action.isExecutable(this);  // Lead Pass
+    action_mask[5] = pass_action.isLeadPassExecutable(this);     // Lead Pass
 
-    action_mask[6] = pass_action.isExecutable(this);  // Through Pass
+    action_mask[6] = pass_action.isThroughPassExecutable(this);  // Through Pass
 
     // 7 控球 HoldBall
     action_mask[7] = hold_ball.isExecutable(this);
