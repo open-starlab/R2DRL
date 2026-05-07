@@ -82,13 +82,17 @@ private:
     static constexpr int STATE_NUM = 97;
     static constexpr int HYBRID_ACTION_NUM = 6;
 
+    static constexpr uint8_t PHASE_NON_PLAY_ON = 0;
+    static constexpr uint8_t PHASE_PLAY_ON     = 1;
+
     // C++ & Python 必须一致
-    static constexpr size_t OFFSET_FLAG_A   = 0;  // 1 byte
-    static constexpr size_t OFFSET_FLAG_B   = 1;  // 1 byte
-    static constexpr size_t OFFSET_MASK     = align4(OFFSET_FLAG_B + 1);  // => 4
-    
-    static constexpr size_t OFFSET_CYCLE    = align4(OFFSET_MASK + BASE_ACTION_NUM /* or MASK_NUM */);
-    static constexpr size_t OFFSET_STATE    = align4(OFFSET_CYCLE + sizeof(int32_t));
+    static constexpr size_t OFFSET_PHASE    = 0;  // uint8
+    static constexpr size_t OFFSET_OBS_SEQ  = 4;  // int32
+    static constexpr size_t OFFSET_ACT_SEQ  = 8;  // int32
+    static constexpr size_t OFFSET_DONE_SEQ = 12; // int32
+    static constexpr size_t OFFSET_CYCLE    = 16; // int32
+    static constexpr size_t OFFSET_MASK     = align4(OFFSET_CYCLE + sizeof(int32_t));
+    static constexpr size_t OFFSET_STATE    = align4(OFFSET_MASK + BASE_ACTION_NUM /* or MASK_NUM */);
     static constexpr size_t OFFSET_ACTION   = align4(OFFSET_STATE + STATE_NUM * sizeof(float));
     
     static constexpr size_t OFFSET_HYBRID_MASK = align4(OFFSET_ACTION + sizeof(int32_t));          // HYBRID_ACTION_NUM * uint8_t
@@ -166,11 +170,11 @@ private:
     void runHeliosMaintenanceAction_();
     void runHeliosFrame_();
     bool isDoCatchExecutable() const;
-    int getActionFromSharedMemory();  // 在 actionImpl 中调用
+    int getActionFromSharedMemory(int expected_obs_seq);  // 在 actionImpl 中调用
     bool inOurPenaltyArea() const;
 public:
     void writeHybridMaskToSharedMemory();
-    bool readHybridActionFromSharedMemory(int &a, float &u0, float &u1, int timeout_ms = 5000);
+    bool readHybridActionFromSharedMemory(int expected_obs_seq, int &a, float &u0, float &u1, int timeout_ms = 5000);
     bool takeHybridAction(int a, double u0, double u1);
     std::array<bool,HYBRID_ACTION_NUM> getHybridActionMask() const;
     void setHybridActionMask();

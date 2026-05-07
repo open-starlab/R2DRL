@@ -460,7 +460,7 @@ void SamplePlayer::writeHybridMaskToSharedMemory()
 }
 
 
-bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1, int timeout_ms)
+bool SamplePlayer::readHybridActionFromSharedMemory(int expected_obs_seq, int &a, float &u0, float &u1, int timeout_ms)
 {
     const int my_cycle = world().time().cycle();
 
@@ -470,20 +470,19 @@ bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1
     }
 
     auto* base                 = static_cast<uint8_t*>(shm_ptr);
-    volatile uint8_t* flag_A   = base + OFFSET_FLAG_A;
-    volatile uint8_t* flag_B   = base + OFFSET_FLAG_B;
     int32_t* shm_cycle         = reinterpret_cast<int32_t*>(base + OFFSET_CYCLE);
+    int32_t* shm_act_seq       = reinterpret_cast<int32_t*>(base + OFFSET_ACT_SEQ);
     int32_t* shm_hybrid_action = reinterpret_cast<int32_t*>(base + OFFSET_HYBRID_ACT);
     float*   shm_u0            = reinterpret_cast<float*>(base + OFFSET_HYBRID_U0);
     float*   shm_u1            = reinterpret_cast<float*>(base + OFFSET_HYBRID_U1);
 
 
-    // 和 Base 的握手保持一致：等待 Python 写完 (A==1,B==0)
+    // 和 Base 的握手保持一致：等待 Python 为当前 obs_seq 提交动作
     const auto start = std::chrono::steady_clock::now();
     const auto TO    = std::chrono::milliseconds(timeout_ms);
     int loop_cnt = 0;
 
-    while (!(*flag_A == 1 && *flag_B == 0)) {
+    while (*shm_act_seq != expected_obs_seq) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
         ++loop_cnt;
 
@@ -492,8 +491,8 @@ bool SamplePlayer::readHybridActionFromSharedMemory(int &a, float &u0, float &u1
         if (std::chrono::steady_clock::now() - start > TO) {
             std::ostringstream oss;
             oss << "[Hybrid] wait action timeout at cycle=" << my_cycle
-                << " flag_A=" << int(*flag_A)
-                << " flag_B=" << int(*flag_B)
+                << " expected_obs_seq=" << expected_obs_seq
+                << " act_seq=" << *shm_act_seq
                 << " shm_cycle=" << *shm_cycle;
             dlog.addText(Logger::TEAM,"[Hybrid][ERROR] ... wait action timeout");
 
@@ -537,12 +536,9 @@ void SamplePlayer::writeSharedMemory()
 
     // 指针区
     auto* base = static_cast<uint8_t*>(shm_ptr);
-    volatile uint8_t* flag_A = base + OFFSET_FLAG_A;
-    volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
     uint8_t*  shm_mask  = base + OFFSET_MASK;
     int32_t*  shm_cycle = reinterpret_cast<int32_t*>(base + OFFSET_CYCLE);
     float*    shm_state = reinterpret_cast<float*>(base + OFFSET_STATE);
-    int32_t*  shm_action= reinterpret_cast<int32_t*>(base + OFFSET_ACTION);
 
 
     // 1) 写 mask
@@ -564,8 +560,6 @@ void SamplePlayer::writeSharedMemory()
     }
     for (int i = 0; i < 5 && i < static_cast<int>(state.size()); ++i) {
     }
-
-    // 这里不改 flag 协议，只打印当前 flag 值
 
 }
 
@@ -617,19 +611,34 @@ SamplePlayer::actionImpl()
         return shm_ptr ? static_cast<uint8_t*>(shm_ptr) : nullptr;
     };
 
-    auto shm_flags = [&](volatile uint8_t*& A, volatile uint8_t*& B) -> bool {
+    auto shm_phase_ptr = [&]() -> volatile uint8_t* {
         uint8_t* base = shm_base();
-        if (!base) return false;
-        A = base + OFFSET_FLAG_A;
-        B = base + OFFSET_FLAG_B;
-        return true;
+        return base ? (base + OFFSET_PHASE) : nullptr;
     };
 
-    // write B then fence then A (same ordering as your Python helper)
-    auto shm_set_flags = [&](volatile uint8_t* A, volatile uint8_t* B, uint8_t a, uint8_t b) {
-        *B = b;
+    auto shm_i32 = [&](size_t off) -> volatile int32_t* {
+        uint8_t* base = shm_base();
+        return base ? reinterpret_cast<volatile int32_t*>(base + off) : nullptr;
+    };
+
+    auto publish_obs_seq = [&](int32_t next_obs_seq) {
+        volatile uint8_t* shm_phase = shm_phase_ptr();
+        volatile int32_t* shm_obs_seq = shm_i32(OFFSET_OBS_SEQ);
+        if (!shm_phase || !shm_obs_seq) {
+            return;
+        }
+        *shm_phase = PHASE_PLAY_ON;
         std::atomic_thread_fence(std::memory_order_release);
-        *A = a;
+        *shm_obs_seq = next_obs_seq;
+    };
+
+    auto publish_done_seq = [&](int32_t done_seq) {
+        volatile int32_t* shm_done_seq = shm_i32(OFFSET_DONE_SEQ);
+        if (!shm_done_seq) {
+            return;
+        }
+        std::atomic_thread_fence(std::memory_order_release);
+        *shm_done_seq = done_seq;
     };
 
     auto cerr_flags = [&](const char* tag) {
@@ -644,9 +653,11 @@ SamplePlayer::actionImpl()
             //           << "\n";
             return;
         }
-        volatile uint8_t* A = nullptr;
-        volatile uint8_t* B = nullptr;
-        if (!shm_flags(A, B)) {
+        volatile uint8_t* phase = shm_phase_ptr();
+        volatile int32_t* obs_seq = shm_i32(OFFSET_OBS_SEQ);
+        volatile int32_t* act_seq = shm_i32(OFFSET_ACT_SEQ);
+        volatile int32_t* done_seq = shm_i32(OFFSET_DONE_SEQ);
+        if (!phase || !obs_seq || !act_seq || !done_seq) {
             // std::cerr << "[SHM][" << tag << "] cyc=" << cyc
             //           << " gm=" << gm
             //           << " mode=" << int(mode_)
@@ -656,7 +667,10 @@ SamplePlayer::actionImpl()
         // std::cerr << "[SHM][" << tag << "] cyc=" << cyc
         //           << " gm=" << gm
         //           << " mode=" << int(mode_)
-        //           << " flags=(" << int(*A) << "," << int(*B) << ")"
+        //           << " phase=" << int(*phase)
+        //           << " obs_seq=" << int(*obs_seq)
+        //           << " act_seq=" << int(*act_seq)
+        //           << " done_seq=" << int(*done_seq)
         //           << " kickable=" << int(world().self().isKickable())
         //           << " frozen=" << int(world().self().isFrozen())
         //           << " goalie=" << int(world().self().goalie())
@@ -679,24 +693,22 @@ SamplePlayer::actionImpl()
 
         setActionMask();
         writeSharedMemory();
+        auto* shm_obs_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_OBS_SEQ);
+        auto* shm_act_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_ACT_SEQ);
+        auto* shm_done_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_DONE_SEQ);
+        const int32_t next_obs_seq = std::max({ int(*shm_obs_seq), int(*shm_act_seq), int(*shm_done_seq) }) + 1;
 
-        volatile uint8_t* flag_A = nullptr;
-        volatile uint8_t* flag_B = nullptr;
-        if (!shm_flags(flag_A, flag_B)) throw std::runtime_error("shm_flags failed (Base)");
-
-        // obs ready => (0,1)
-        shm_set_flags(flag_A, flag_B, 0, 1);
+        publish_obs_seq(next_obs_seq);
         cerr_flags("Base:obs_ready");
 
-        const int act = getActionFromSharedMemory(); // TIMEOUT inside changed to 45000ms
+        const int act = getActionFromSharedMemory(next_obs_seq);
         if (0 <= act && act < BASE_ACTION_NUM) {
             takeAction(act);
         } else {
             throw std::runtime_error("[Base][ERROR] invalid action received");
         }
 
-        // done => (1,1)
-        shm_set_flags(flag_A, flag_B, 1, 1);
+        publish_done_seq(next_obs_seq);
         cerr_flags("Base:done");
         return;
     }
@@ -713,20 +725,19 @@ SamplePlayer::actionImpl()
         setHybridActionMask();
         writeSharedMemory();
         writeHybridMaskToSharedMemory();
+        auto* shm_obs_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_OBS_SEQ);
+        auto* shm_act_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_ACT_SEQ);
+        auto* shm_done_seq = reinterpret_cast<volatile int32_t*>(static_cast<uint8_t*>(shm_ptr) + OFFSET_DONE_SEQ);
+        const int32_t next_obs_seq = std::max({ int(*shm_obs_seq), int(*shm_act_seq), int(*shm_done_seq) }) + 1;
 
-        volatile uint8_t* flag_A = nullptr;
-        volatile uint8_t* flag_B = nullptr;
-        if (!shm_flags(flag_A, flag_B)) throw std::runtime_error("shm_flags failed (Hybrid)");
-
-        // obs ready => (0,1)
-        shm_set_flags(flag_A, flag_B, 0, 1);
+        publish_obs_seq(next_obs_seq);
         cerr_flags("Hybrid:obs_ready");
 
         int   a  = -1;
         float u0 = 0.5f;
         float u1 = 0.5f;
 
-        if (!readHybridActionFromSharedMemory(a, u0, u1, /*timeout_ms=*/450000)) {
+        if (!readHybridActionFromSharedMemory(next_obs_seq, a, u0, u1, /*timeout_ms=*/450000)) {
             std::ostringstream oss;
             oss << "[Hybrid][ERROR] read action timeout/invalid at cycle=" << world().time().cycle();
             throw std::runtime_error(oss.str());
@@ -758,8 +769,7 @@ SamplePlayer::actionImpl()
             this->setNeckAction(new Neck_TurnToBallOrScan(0));
         }
 
-        // done => (1,1)
-        shm_set_flags(flag_A, flag_B, 1, 1);
+        publish_done_seq(next_obs_seq);
         cerr_flags("Hybrid:done");
         return;
     }
@@ -770,11 +780,9 @@ SamplePlayer::actionImpl()
     cerr_flags("NonPlayOn:begin");
 
     if (shm_ptr) {
-        volatile uint8_t* flag_A = nullptr;
-        volatile uint8_t* flag_B = nullptr;
-        if (shm_flags(flag_A, flag_B)) {
-            shm_set_flags(flag_A, flag_B, 0, 0);
-            // std::cerr << "[SHM][NonPlayOn] cyc=" << cyc << " gm=" << gm << " set flags (0,0)\n";
+        volatile uint8_t* phase = shm_phase_ptr();
+        if (phase) {
+            *phase = PHASE_NON_PLAY_ON;
         }
     }
     runHeliosFrame_();
@@ -876,7 +884,7 @@ void SamplePlayer::runHeliosFrame_()
 
 
 // sample_player.cpp
-int SamplePlayer::getActionFromSharedMemory()
+int SamplePlayer::getActionFromSharedMemory(int expected_obs_seq)
 {
     const int my_cycle = world().time().cycle(); //获取当前cycle
 
@@ -885,16 +893,15 @@ int SamplePlayer::getActionFromSharedMemory()
     }
 
     auto* base        = static_cast<uint8_t*>(shm_ptr);
-    volatile uint8_t* flag_A = base + OFFSET_FLAG_A;    //动作储存标志
-    volatile uint8_t* flag_B = base + OFFSET_FLAG_B;
     auto* shm_cycle   = reinterpret_cast<int32_t*>(base + OFFSET_CYCLE); //当前帧号
+    auto* shm_act_seq = reinterpret_cast<int32_t*>(base + OFFSET_ACT_SEQ);
     auto* shm_action  = reinterpret_cast<int32_t*>(base + OFFSET_ACTION); //动作
     
 
     const auto start   = std::chrono::steady_clock::now();
     const auto TIMEOUT = std::chrono::milliseconds(36000000); // 10 小时，基本上不会超时
     int loop_cnt = 0;
-    while (!(*flag_A == 1 && *flag_B == 0)) {
+    while (*shm_act_seq != expected_obs_seq) {
         std::this_thread::sleep_for(std::chrono::microseconds(100));
         ++loop_cnt;
 
@@ -903,8 +910,8 @@ int SamplePlayer::getActionFromSharedMemory()
         if (std::chrono::steady_clock::now() - start > TIMEOUT) {
             std::ostringstream oss;
             oss << "wait action timeout at cycle=" << my_cycle
-                << " flag_A=" << int(*flag_A)
-                << " flag_B=" << int(*flag_B)
+                << " expected_obs_seq=" << expected_obs_seq
+                << " act_seq=" << *shm_act_seq
                 << " shm_cycle=" << *shm_cycle;
             throw std::runtime_error(oss.str());  // ✅ 允许报错
         }
@@ -2123,8 +2130,10 @@ bool SamplePlayer::initSharedMemory() {
     };
 
     bool ok = true;
-    ok &= need(OFFSET_FLAG_A, 1, "FLAG_A");
-    ok &= need(OFFSET_FLAG_B, 1, "FLAG_B");
+    ok &= need(OFFSET_PHASE, 1, "PHASE");
+    ok &= need(OFFSET_OBS_SEQ, sizeof(int32_t), "OBS_SEQ");
+    ok &= need(OFFSET_ACT_SEQ, sizeof(int32_t), "ACT_SEQ");
+    ok &= need(OFFSET_DONE_SEQ, sizeof(int32_t), "DONE_SEQ");
     ok &= need(OFFSET_MASK, BASE_ACTION_NUM, "MASK");
     ok &= need(OFFSET_CYCLE, sizeof(int32_t), "CYCLE");
     ok &= need(OFFSET_ACTION, sizeof(int32_t), "ACTION");

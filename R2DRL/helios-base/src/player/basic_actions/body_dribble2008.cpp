@@ -58,12 +58,138 @@
 #include <rcsc/math_util.h>
 #include <rcsc/timer.h>
 
+#include <cmath>
+#include <iostream>
+#include <limits>
 #include <list>
 #include <functional>
 
 using namespace rcsc;
 
 #define USE_CHANGE_VIEW
+
+namespace {
+
+inline bool
+isFiniteVector( const Vector2D & value )
+{
+    return std::isfinite( value.x )
+        && std::isfinite( value.y );
+}
+
+inline double
+vectorXOrNaN( const Vector2D * value )
+{
+    return value
+        ? value->x
+        : std::numeric_limits< double >::quiet_NaN();
+}
+
+inline double
+vectorYOrNaN( const Vector2D * value )
+{
+    return value
+        ? value->y
+        : std::numeric_limits< double >::quiet_NaN();
+}
+
+bool
+validateDribbleKick( PlayerAgent * agent,
+                     const char * context,
+                     const double kick_power,
+                     const double kick_dir,
+                     const Vector2D * target_point = 0,
+                     const Vector2D * required_accel = 0,
+                     const Vector2D * first_vel = 0 )
+{
+    const bool valid = std::isfinite( kick_power )
+                    && std::isfinite( kick_dir )
+                    && ( ! target_point || isFiniteVector( *target_point ) )
+                    && ( ! required_accel || isFiniteVector( *required_accel ) )
+                    && ( ! first_vel || isFiniteVector( *first_vel ) );
+
+    if ( valid )
+    {
+        return true;
+    }
+
+    const WorldModel & wm = agent->world();
+
+    dlog.addText( Logger::DRIBBLE,
+                  "%s: invalid kick spec cycle=%ld stopped=%ld unum=%d"
+                  " power=%.6f dir=%.6f target=(%.6f %.6f)"
+                  " accel=(%.6f %.6f) first_vel=(%.6f %.6f)"
+                  " self_pos=(%.6f %.6f) self_vel=(%.6f %.6f)"
+                  " body=%.6f kick_rate=%.6f"
+                  " ball_pos=(%.6f %.6f) ball_vel=(%.6f %.6f)",
+                  context,
+                  static_cast< long >( wm.time().cycle() ),
+                  static_cast< long >( wm.time().stopped() ),
+                  wm.self().unum(),
+                  kick_power,
+                  kick_dir,
+                  vectorXOrNaN( target_point ),
+                  vectorYOrNaN( target_point ),
+                  vectorXOrNaN( required_accel ),
+                  vectorYOrNaN( required_accel ),
+                  vectorXOrNaN( first_vel ),
+                  vectorYOrNaN( first_vel ),
+                  wm.self().pos().x,
+                  wm.self().pos().y,
+                  wm.self().vel().x,
+                  wm.self().vel().y,
+                  wm.self().body().degree(),
+                  wm.self().kickRate(),
+                  wm.ball().pos().x,
+                  wm.ball().pos().y,
+                  wm.ball().vel().x,
+                  wm.ball().vel().y );
+
+    std::cerr << "[DRIBBLE][invalid_kick] context=" << context
+              << " time=" << wm.time()
+              << " unum=" << wm.self().unum()
+              << " power=" << kick_power
+              << " dir=" << kick_dir
+              << " target=(" << vectorXOrNaN( target_point )
+              << ", " << vectorYOrNaN( target_point ) << ")"
+              << " accel=(" << vectorXOrNaN( required_accel )
+              << ", " << vectorYOrNaN( required_accel ) << ")"
+              << " first_vel=(" << vectorXOrNaN( first_vel )
+              << ", " << vectorYOrNaN( first_vel ) << ")"
+              << " self_pos=(" << wm.self().pos().x
+              << ", " << wm.self().pos().y << ")"
+              << " self_vel=(" << wm.self().vel().x
+              << ", " << wm.self().vel().y << ")"
+              << " body=" << wm.self().body().degree()
+              << " kick_rate=" << wm.self().kickRate()
+              << " ball_pos=(" << wm.ball().pos().x
+              << ", " << wm.ball().pos().y << ")"
+              << " ball_vel=(" << wm.ball().vel().x
+              << ", " << wm.ball().vel().y << ")"
+              << std::endl;
+
+    return false;
+}
+
+bool
+recoverInvalidDribbleKick( PlayerAgent * agent,
+                           const char * context )
+{
+    agent->debugClient().addMessage( "DribKickInvalid" );
+    dlog.addText( Logger::DRIBBLE,
+                  "%s: fallback to stop-ball after invalid kick spec",
+                  context );
+
+    if ( agent->world().self().isKickable()
+         && agent->world().ball().velValid() )
+    {
+        return Body_StopBall().execute( agent );
+    }
+
+    return agent->doTurn( 0.0 );
+}
+
+} // unnamed namespace
 
 /*-------------------------------------------------------------------*/
 /*!
@@ -262,10 +388,19 @@ Body_Dribble2008::doTurn( PlayerAgent * agent,
     // just stop the ball
 
     double kick_power = wm.ball().vel().r() / wm.self().kickRate();
-    AngleDeg kick_dir = ( wm.ball().vel().th() - 180.0 ) - wm.self().body();
+    const double kick_dir = ( ( wm.ball().vel().th() - 180.0 ) - wm.self().body() ).degree();
 
     dlog.addText( Logger::DRIBBLE,
                   __FILE__": doTurn() just stop the ball." );
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doTurn.stop_ball",
+                                kick_power,
+                                kick_dir ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doTurn.stop_ball" );
+    }
+
     agent->doKick( kick_power, kick_dir );
     return true;
 }
@@ -398,9 +533,20 @@ Body_Dribble2008::doCollideWithBall( PlayerAgent * agent )
         return false;
     }
 
+    const double kick_power = std::min( required_power, ServerParam::i().maxPower() );
+    const double kick_dir = ( required_accel.th() - wm.self().body() ).degree();
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doCollideWithBall",
+                                kick_power,
+                                kick_dir,
+                                0,
+                                &required_accel ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doCollideWithBall" );
+    }
 
-    agent->doKick( std::min( required_power, ServerParam::i().maxPower() ),
-                   required_accel.th() - wm.self().body() );
+    agent->doKick( kick_power, kick_dir );
     return true;
 
 }
@@ -650,8 +796,25 @@ Body_Dribble2008::doKickTurnsDash( PlayerAgent * agent,
                   n_turn );
     agent->debugClient().addMessage( "DribKT%dD", n_turn );
 
-    //////////////////////////////////////////////////////////
-    // register intention
+    const double kick_dir = ( required_accel.th() - wm.self().body() ).degree();
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doKickTurns",
+                                required_kick_power,
+                                kick_dir,
+                                &target_point,
+                                &required_accel ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doKickTurns" );
+    }
+
+    // execute first kick
+    const bool kicked = agent->doKick( required_kick_power, kick_dir );
+    if ( ! kicked )
+    {
+        return false;
+    }
+
     agent->setIntention
         ( new IntentionDribble2008( target_point,
                                     M_dist_thr,
@@ -669,9 +832,7 @@ Body_Dribble2008::doKickTurnsDash( PlayerAgent * agent,
     }
 #endif
 
-    // execute first kick
-    return agent->doKick( required_kick_power,
-                          required_accel.th() - wm.self().body() );
+    return true;
 }
 
 /*-------------------------------------------------------------------*/
@@ -870,7 +1031,24 @@ Body_Dribble2008::doKickTurnsDashes( PlayerAgent * agent,
                       kick_accel.x, kick_accel.y,
                       kick_power );
 
-        agent->doKick( kick_power, kick_accel.th() - wm.self().body() );
+        const double kick_dir = ( kick_accel.th() - wm.self().body() ).degree();
+        if ( ! validateDribbleKick( agent,
+                                    __FILE__": doKickTurnsDashes",
+                                    kick_power,
+                                    kick_dir,
+                                    &target_point,
+                                    &kick_accel,
+                                    &first_vel ) )
+        {
+            return recoverInvalidDribbleKick( agent,
+                                              __FILE__": doKickTurnsDashes" );
+        }
+
+        const bool kicked = agent->doKick( kick_power, kick_dir );
+        if ( ! kicked )
+        {
+            return false;
+        }
 
         agent->setIntention
             ( new IntentionDribble2008( target_point,
@@ -1081,27 +1259,6 @@ Body_Dribble2008::doKickDashes( PlayerAgent * agent,
 
     agent->debugClient().addMessage( "DribKD%d:%.0f", dash_count, dash_power );
     agent->debugClient().addLine( wm.self().pos(), wm.self().pos() + my_pos );
-    //////////////////////////////////////////////////////////
-    // register intention
-    agent->setIntention
-        ( new IntentionDribble2008( target_point,
-                                    M_dist_thr,
-                                    0, // zero turn
-                                    dash_count,
-                                    std::fabs( dash_power ),
-                                    ( dash_power < 0.0 ), // back_dash
-                                    wm.time() ) );
-    say( agent, target_point, dash_count );
-#ifdef USE_CHANGE_VIEW
-    if ( dash_count >= 2 )
-    {
-        agent->setViewAction( new View_Normal() );
-    }
-#endif
-
-    dlog.addText( Logger::DRIBBLE,
-                  __FILE__": doKickDashes() register intention. dash_count=%d",
-                  dash_count );
 
 #if 0
     {
@@ -1130,9 +1287,48 @@ Body_Dribble2008::doKickDashes( PlayerAgent * agent,
 
 #endif
 
+    const double kick_dir = ( required_accel.th() - wm.self().body() ).degree();
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doKickDashes",
+                                required_kick_power,
+                                kick_dir,
+                                &target_point,
+                                &required_accel,
+                                &required_first_vel ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doKickDashes" );
+    }
+
     // execute first kick
-    return agent->doKick( required_kick_power,
-                          required_accel.th() - wm.self().body() );
+    if ( ! agent->doKick( required_kick_power, kick_dir ) )
+    {
+        return false;
+    }
+
+    //////////////////////////////////////////////////////////
+    // register intention only after a valid kick command is sent.
+    agent->setIntention
+        ( new IntentionDribble2008( target_point,
+                                    M_dist_thr,
+                                    0, // zero turn
+                                    dash_count,
+                                    std::fabs( dash_power ),
+                                    ( dash_power < 0.0 ), // back_dash
+                                    wm.time() ) );
+    say( agent, target_point, dash_count );
+#ifdef USE_CHANGE_VIEW
+    if ( dash_count >= 2 )
+    {
+        agent->setViewAction( new View_Normal() );
+    }
+#endif
+
+    dlog.addText( Logger::DRIBBLE,
+                  __FILE__": doKickDashes() register intention. dash_count=%d",
+                  dash_count );
+
+    return true;
 }
 
 
@@ -1308,9 +1504,25 @@ Body_Dribble2008::doKickDashesWithBall( PlayerAgent * agent,
 
     Vector2D kick_accel = dribble->first_ball_vel_ - wm.ball().vel();
 
+    const double kick_power = kick_accel.r() / wm.self().kickRate();
+    const double kick_dir = ( kick_accel.th() - wm.self().body() ).degree();
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doKickDashesWithBall",
+                                kick_power,
+                                kick_dir,
+                                &target_point,
+                                &kick_accel,
+                                &dribble->first_ball_vel_ ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doKickDashesWithBall" );
+    }
+
     // execute first kick
-    agent->doKick( kick_accel.r() / wm.self().kickRate(),
-                   kick_accel.th() - wm.self().body() );
+    if ( ! agent->doKick( kick_power, kick_dir ) )
+    {
+        return false;
+    }
 
     //
     // register intention
@@ -1843,8 +2055,20 @@ Body_Dribble2008::doAvoidKick( PlayerAgent * agent,
                   __FILE__": doAvoidKick. done" );
     agent->debugClient().addMessage( "AvoidKick" );
 
-    return agent->doKick( required_kick_power,
-                          required_accel.th() - wm.self().body() );
+    const double kick_dir = ( required_accel.th() - wm.self().body() ).degree();
+    if ( ! validateDribbleKick( agent,
+                                __FILE__": doAvoidKick",
+                                required_kick_power,
+                                kick_dir,
+                                0,
+                                &required_accel,
+                                &required_first_vel ) )
+    {
+        return recoverInvalidDribbleKick( agent,
+                                          __FILE__": doAvoidKick" );
+    }
+
+    return agent->doKick( required_kick_power, kick_dir );
 }
 
 /*-------------------------------------------------------------------*/

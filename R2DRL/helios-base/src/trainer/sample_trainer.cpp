@@ -160,10 +160,6 @@ bool SampleTrainer::init_shm_()
     std::cerr << "[trainer] shm attached: " << shm_name_
               << " size=" << shm_size_ << std::endl;
 
-    const std::uint8_t A = rd8_(T_FLAG_A);
-    const std::uint8_t B = rd8_(T_FLAG_B);
-
-    
     return (shm_ready_ = true);
 }
 
@@ -330,11 +326,6 @@ SampleTrainer::actionImpl()
     //           << " shm_ptr=" << (void*)shm_
     //           << "\n";
 
-    if (shm_) {
-        auto [a_dbg, b_dbg] = trainer_flags(shm_);
-        // std::cerr << "[trainer] flags BEFORE logic: A="
-        //           << int(a_dbg) << " B=" << int(b_dbg) << "\n";
-    }
     // std::cerr << "=================================================\n";
 
     // 1) 队名未准备好：这里不视为状态机错误，正常 return
@@ -354,108 +345,24 @@ SampleTrainer::actionImpl()
         return;
     }
 
-    // 3) 非 PlayOn：按你的设计，这是正常情况，直接 return
-    if (world().gameMode().type() != GameMode::PlayOn) {
-        // std::cerr << "[trainer] not PlayOn (pm="
-        //           << world().gameMode().type()
-        //           << "), skip IPC.\n";
+    const std::int32_t req_seq = req_seq_();
+    const std::int32_t done_seq = done_seq_();
+
+    if (req_seq <= done_seq) {
+        wr8_(T_PHASE, TRAINER_PHASE_IDLE);
         return;
     }
 
-    // std::cerr << "[trainer] PlayOn mode, enter IPC.\n";
+    wr8_(T_PHASE, TRAINER_PHASE_BUSY);
+    std::atomic_thread_fence(std::memory_order_acquire);
 
-    auto throw_state_error =
-        [this](const std::string & msg,
-               int a = -1,
-               int b = -1) -> void
-        {
-            std::ostringstream oss;
-            oss << "[trainer][FATAL] " << msg
-                << " cycle=" << world().time().cycle()
-                << " playmode=" << world().gameMode().type();
+    const std::int32_t opcode = rd32_(T_OPCODE);
+    exec_opcode_(opcode);
 
-            if (a >= 0 && b >= 0) {
-                oss << " flags=(" << a << "," << b << ")";
-            }
-
-            oss << " shm_ready_=" << shm_ready_
-                << " shm_ptr=" << static_cast<void*>(shm_);
-
-            throw std::runtime_error(oss.str());
-        };
-
-    // 4) 读取 flags
-    auto [a, b] = trainer_flags(shm_);
-    // std::cerr << "[trainer][IPC] entry flags A=" << int(a)
-    //           << " B=" << int(b) << "\n";
-
-    // 5) 状态机入口只允许 00 / 11 / 01 / 10
-    //    其中：
-    //      00 / 11 -> 新一轮开始，置 01
-    //      01      -> 本轮继续等待 10
-    //      10      -> 本轮直接消费 request
-    if ((a == 0 && b == 0) || (a == 1 && b == 1)) {
-        trainer_set_ready(shm_);  // -> 01
-        // std::cerr << "[trainer][IPC] set READY -> (0,1)\n";
-        a = 0;
-        b = 1;
-    }
-    else if (a == 0 && b == 1) {
-        // std::cerr << "[trainer][IPC] already READY -> (0,1)\n";
-    }
-    else if (a == 1 && b == 0) {
-        // std::cerr << "[trainer][IPC] already REQUEST -> (1,0)\n";
-    }
-    else {
-        throw_state_error("invalid entry flags", int(a), int(b));
-    }
-
-    // 6) READY(01): 等 Python 写 REQUEST(10)
-    if (a == 0 && b == 1) {
-        // std::cerr << "[trainer][IPC] waiting REQUEST(1,0)...\n";
-        if (!wait_trainer_request(shm_)) {
-            throw_state_error("wait_trainer_request() timeout while in READY state",
-                              int(a), int(b));
-        }
-
-        // wait 成功后，理论上共享内存必须已经是 10
-        auto [a_after, b_after] = trainer_flags(shm_);
-        // std::cerr << "[trainer][IPC] flags after wait A=" << int(a_after)
-        //           << " B=" << int(b_after) << "\n";
-
-        if (!(a_after == 1 && b_after == 0)) {
-            throw_state_error("wait_trainer_request() returned but flags are not REQUEST",
-                              int(a_after), int(b_after));
-        }
-
-        a = a_after;
-        b = b_after;
-    }
-
-    // 7) REQUEST(10): 执行动作 -> ACK(11)
-    if (a == 1 && b == 0) {
-        trainer_acquire_fence();
-
-        const std::int32_t opcode = rd32_(T_OPCODE);
-        // std::cerr << "[trainer][IPC] got request opcode=" << opcode << "\n";
-
-        exec_opcode_(opcode);
-
-        trainer_set_ack11(shm_);
-        // std::cerr << "[trainer][IPC] set ACK -> (1,1)\n";
-
-        auto [a_ack, b_ack] = trainer_flags(shm_);
-        if (!(a_ack == 1 && b_ack == 1)) {
-            throw_state_error("trainer_set_ack11() failed to set ACK",
-                              int(a_ack), int(b_ack));
-        }
-
-        return;
-    }
-
-    // 8) 理论上不可能到这里
-    throw_state_error("unexpected fallthrough after IPC state handling",
-                      int(a), int(b));
+    std::atomic_thread_fence(std::memory_order_release);
+    wr32_(T_DONE_SEQ, req_seq);
+    wr8_(T_PHASE, TRAINER_PHASE_IDLE);
+    return;
 }
 
 
