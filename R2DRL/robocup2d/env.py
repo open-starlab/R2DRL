@@ -236,7 +236,7 @@ class Robocup2dEnv:
         self.config.use_custom_start = desired_use_custom_start
 
     def _warn_if_timeouts_are_too_large(self):
-        large_timeout = 300.0
+        large_timeout = 600.0
         if self.config.wait_ready_timeout > large_timeout:
             self.log.warning(
                 "[timeout_config] wait_ready_timeout is very large: "
@@ -508,20 +508,6 @@ class Robocup2dEnv:
             if self.config.terminate_on_goal:
                 self.done = 1
                 terminal_reason = "goal_conceded"
-
-        if (
-            int(self.score[0]) != prev_score_left
-            or int(self.score[1]) != prev_score_right
-        ):
-            scoring_side = "left" if int(self.score[0]) > prev_score_left else "right"
-            print(
-                "[env.score] "
-                f"turn={self.turn_count} "
-                f"episode_step={self.episode_steps} "
-                f"scoring_side={scoring_side} "
-                f"score={self.score[0]}-{self.score[1]} "
-                f"ball=({ball_x:.3f},{ball_y:.3f})"
-            )
 
         timeout = (self.episode_steps >= self.episode_limit)
 

@@ -36,23 +36,37 @@ env_args:
   ports_wait_timeout: 300.0
   server_wait_seconds: 300.0
   text_logging: false
-  benchmark_mode: full_match
+  benchmark_mode: scenario
   n: 3
-  episode_limit: 3000
-  half_time: 60000000
+  episode_limit: 300
+  half_time: 6000000
   seed: 123
   game_logging: false
-  use_custom_start: false
-  terminate_on_goal: false
-  terminate_on_possession_loss: false
+  use_custom_start: true
+  terminate_on_goal: true
+  terminate_on_possession_loss: true
   reward_on_possession_loss: 0.0
+  terminate_on_ball_out: true
+  reward_on_ball_out: 0.0
   tb: true
-  init_n: 3
+  init_n: 1
+  trajectory_path: /fsws1/h_qin/robocup/robocup/pymarl/src/envs/robocup2d/trajectories/3v3trajectories_right_half_left_nearest_kickable.npz
+  start_window_size: 1
+  progress_bucket_count: 30
+  current_target_window_size: 1
+  num_selected_trajectories: 100
+  random_sample: false
+  scenario_difficulty_buckets:
+    easy: 2
+    medium: 15
+    hard: 29
   team: Base
-  opponent_state: lv3
-  opponent_level: 1.0
+  opponent_state: lv1
+  opponent_level: 0.1
+  scenario_start: easy
+  scenario_difficulty: easy
   useMaxEpv: true
-  tb_log_dir: ./runs/parallelr2drl_3vs3benchmark_base_opp-lv3_epv-on
+  tb_log_dir: ./runs/parallelr2drl_3vs3scenario_base_init-1_start-easy_opp-lv1_epv-on
 batch_size_run: 16
 test_nepisode: 32
 batch_size: 32

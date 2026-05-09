@@ -30,11 +30,11 @@ env_args:
   goal_y: 7.01
   HALF_LENGTH: 52.5
   HALF_WIDTH: 34.0
-  wait_ready_timeout: 36000.0
-  playon_timeout: 36000.0
+  wait_ready_timeout: 300.0
+  playon_timeout: 300.0
   trainer_ready_timeout_ms: 10000.0
-  ports_wait_timeout: 36000.0
-  server_wait_seconds: 360000.0
+  ports_wait_timeout: 300.0
+  server_wait_seconds: 300.0
   text_logging: false
   benchmark_mode: full_match
   n: 3
@@ -53,3 +53,9 @@ env_args:
   opponent_level: 0.1
   useMaxEpv: true
   tb_log_dir: ./runs/parallelr2drl_3vs3benchmark_base_opp-lv1_epv-on
+batch_size_run: 16
+test_nepisode: 32
+batch_size: 32
+buffer_size: 256
+buffer_warmup: 128
+train_updates_per_batch: 4

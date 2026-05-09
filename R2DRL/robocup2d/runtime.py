@@ -87,6 +87,7 @@ class Runtime:
             self.config.trainer_port_offset,
             self.config.coach_port_offset,
             self.config.debug_port_offset,
+            timeout=self.config.ports_wait_timeout,
         )
 
         # log directories
