@@ -120,6 +120,9 @@ class EnvConfig:
         # ---------- Custom Start ----------
         self.use_custom_start: bool = self._require_bool(args, "use_custom_start")
         self.useMaxEpv: bool = self._require_bool(args, "useMaxEpv")
+        self.benchmark_mode: Optional[str] = self._normalize_benchmark_mode(
+            self._optional_str(args, "benchmark_mode", None)
+        )
         self.init_n: int = self._require_int(args, "init_n")
         self.trajectory_path: Optional[str] = self._optional_str(
             args, "trajectory_path", None
@@ -146,22 +149,28 @@ class EnvConfig:
         self.reward_on_ball_out: float = self._optional_float(
             args, "reward_on_ball_out", 0.0
         )
-        self.scenario_difficulty: Optional[str] = self._optional_str(
-            args, "scenario_difficulty", None
+        self.scenario_start: Optional[str] = self._normalize_scenario_label(
+            self._optional_str(args, "scenario_start", None),
+            key="scenario_start",
+        )
+        self.scenario_difficulty: Optional[str] = self._normalize_scenario_label(
+            self._optional_str(args, "scenario_difficulty", None),
+            key="scenario_difficulty",
         )
         self.scenario_difficulty_buckets = args.get(
             "scenario_difficulty_buckets", None
         )
-        if self.scenario_difficulty is not None:
-            scenario_difficulty = self.scenario_difficulty.strip().lower()
-            if scenario_difficulty == "middle":
-                scenario_difficulty = "medium"
-            if scenario_difficulty not in ("easy", "medium", "hard"):
-                raise ValueError(
-                    "scenario_difficulty must be one of: easy, medium/middle, hard; "
-                    f"got {self.scenario_difficulty!r}"
-                )
-            self.scenario_difficulty = scenario_difficulty
+        if self.scenario_difficulty is None:
+            self.scenario_difficulty = self.scenario_start
+        elif (
+            self.scenario_start is not None
+            and self.scenario_difficulty != self.scenario_start
+        ):
+            raise ValueError(
+                "scenario_start and scenario_difficulty must match when both are set; "
+                f"got scenario_start={self.scenario_start!r}, "
+                f"scenario_difficulty={self.scenario_difficulty!r}"
+            )
 
         if not (1 <= self.init_n <= self.n):
             raise ValueError(
@@ -238,3 +247,43 @@ class EnvConfig:
         if key not in args:
             return float(default)
         return self._require_float(args, key)
+
+    def _normalize_benchmark_mode(self, benchmark_mode: Optional[str]) -> Optional[str]:
+        if benchmark_mode is None:
+            return None
+
+        normalized = benchmark_mode.strip().lower().replace("-", "_")
+        if normalized == "":
+            return None
+        if normalized == "fullmatch":
+            normalized = "full_match"
+        if normalized == "action_space":
+            normalized = "actionspace"
+
+        if normalized not in ("scenario", "full_match", "actionspace"):
+            raise ValueError(
+                "benchmark_mode must be one of: scenario, full_match, actionspace; "
+                f"got {benchmark_mode!r}"
+            )
+        return normalized
+
+    def _normalize_scenario_label(
+        self,
+        scenario_label: Optional[str],
+        *,
+        key: str,
+    ) -> Optional[str]:
+        if scenario_label is None:
+            return None
+
+        normalized = scenario_label.strip().lower()
+        if normalized == "":
+            return None
+        if normalized == "middle":
+            normalized = "medium"
+        if normalized not in ("easy", "medium", "hard"):
+            raise ValueError(
+                f"{key} must be one of: easy, medium/middle, hard; "
+                f"got {scenario_label!r}"
+            )
+        return normalized

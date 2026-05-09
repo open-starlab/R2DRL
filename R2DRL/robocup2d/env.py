@@ -40,7 +40,7 @@ class ParallelR2DRL:
         return reward,  done, info
     
     def get_stats(self):
-        return {}
+        return self.env.get_stats()
     
     def close(self):
         self.env.close()
@@ -604,4 +604,13 @@ class Robocup2dEnv:
         }
 
     def get_stats(self):
-        return {}
+        return {
+            "score_left": int(self.score[0]),
+            "score_right": int(self.score[1]),
+            "score_diff": int(self.score[0] - self.score[1]),
+            "max_episode_epv": float(self.agents.max_episode_epv),
+            "restart_total": int(self._restart_total),
+            "restart_recent": int(self._recent_restart_count()),
+            "restart_consecutive": int(self._consecutive_restart_count),
+            "terminal_reason": self._last_terminal_reason,
+        }

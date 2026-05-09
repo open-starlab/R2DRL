@@ -60,7 +60,7 @@ env_args:
     hard: 29
   team: Hybrid
   opponent_state: lv1
-  opponent_level: 0.1
+  opponent_level: 0.05
   scenario_start: easy
   scenario_difficulty: easy
   useMaxEpv: false

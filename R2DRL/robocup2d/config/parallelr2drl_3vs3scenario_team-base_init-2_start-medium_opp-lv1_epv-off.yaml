@@ -62,7 +62,7 @@ env_args:
     hard: 29
   team: Base
   opponent_state: lv1
-  opponent_level: 0.1
+  opponent_level: 0.05
   scenario_start: medium
   scenario_difficulty: medium
   useMaxEpv: false

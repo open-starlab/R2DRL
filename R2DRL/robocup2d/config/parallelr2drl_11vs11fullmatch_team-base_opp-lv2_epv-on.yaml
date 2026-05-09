@@ -50,6 +50,6 @@ env_args:
   init_n: 11
   team: Base
   opponent_state: lv2
-  opponent_level: 0.3
+  opponent_level: 0.5
   useMaxEpv: true
   tb_log_dir: ./runs/parallelr2drl_11vs11fullmatch_team-base_opp-lv2_epv-on

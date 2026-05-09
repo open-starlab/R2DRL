@@ -50,6 +50,6 @@ env_args:
   init_n: 11
   team: Hybrid
   opponent_state: lv1
-  opponent_level: 0.1
+  opponent_level: 0.05
   useMaxEpv: false
   tb_log_dir: ./runs/parallelr2drl_11vs11actionspace_team-hybrid_opp-lv1_epv-off

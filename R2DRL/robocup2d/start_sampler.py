@@ -9,6 +9,7 @@ import numpy as np
 
 class ScenarioStartSampler:
     PREFILTERED_TRAJECTORY_TAG = "_right_half_left_nearest_kickable"
+    KICKABLE_THRESHOLD = 1.085
 
     def __init__(
         self,
@@ -44,6 +45,7 @@ class ScenarioStartSampler:
         self.max_n = self.n_players
         if self.current_n > self.max_n:
             self.current_n = self.max_n
+        self.kickable_threshold = float(self.KICKABLE_THRESHOLD)
 
         self.bucket_idx = self._scenario_bucket_idx(traj_path)
         print(
@@ -254,7 +256,7 @@ class ScenarioStartSampler:
         bx = float(ball[0])
         by = float(ball[1])
         dists = np.sqrt((left_players[:, 0] - bx) ** 2 + (left_players[:, 1] - by) ** 2)
-        return bool(float(np.min(dists)) <= self.KICKABLE_THRESHOLD)
+        return bool(float(np.min(dists)) <= self.kickable_threshold)
 
     def _infer_n_players_from_state_dim(self, frame_dim: int) -> int:
         frame_dim = int(frame_dim)
