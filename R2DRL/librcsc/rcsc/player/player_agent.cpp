@@ -3000,6 +3000,65 @@ PlayerAgent::doCatch()
 
  */
 bool
+PlayerAgent::doCatch( const AngleDeg & dir )
+{
+    if ( world().self().isFrozen() )
+    {
+        dlog.addText( Logger::ACTION,
+                      __FILE__": agent->doCatch. refused. tackle expire period  %d",
+                      world().self().tackleExpires() );
+        std::cerr << world().teamName() << ' '
+                  << world().self().unum() << ": "
+                  << world().time()
+                  << " Now Tackle expire period" << std::endl;
+        return false;
+    }
+
+    if ( ! world().self().goalie() )
+    {
+        std::cerr << world().teamName() << ' '
+                  << world().self().unum() << ": "
+                  << world().time()
+                  << " Only goalies can catch" << std::endl;
+        dlog.addText( Logger::ACTION,
+                      __FILE__": agent->doCatch. only goalie can catch" );
+        return false;
+    }
+
+    if ( world().gameMode().type() != GameMode::PlayOn
+         && world().gameMode().type() != GameMode::PenaltyTaken_ )
+    {
+        std::cerr << world().teamName() << ' '
+                  << world().self().unum() << ": "
+                  << world().time()
+                  << " not play_on mode, cannot catch"
+                  << std::endl;
+        dlog.addText( Logger::ACTION,
+                      __FILE__": agent->doCatch. playmode is not play_on" );
+        return false;
+    }
+
+    if ( ! world().ball().rposValid() )
+    {
+        std::cerr << world().teamName() << ": "
+                  << world().self().unum() << ' '
+                  << world().time()
+                  << " doCatch: ball is unknown." << std::endl;
+        dlog.addText( Logger::ACTION,
+                      __FILE__": Effector::setCatch. ball is unknown. rpos conf count = %d",
+                      world().ball().rposCount() );
+        return false;
+    }
+
+    M_effector.setCatch( dir );
+    return true;
+}
+
+/*-------------------------------------------------------------------*/
+/*!
+
+ */
+bool
 PlayerAgent::doTackle( const double & power_or_dir,
                        const bool foul )
 {

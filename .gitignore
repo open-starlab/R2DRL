@@ -6,3 +6,21 @@ log/
 /rcssmonitor/
 /helios-base/
 /librcsc/
+# Runtime outputs
+*.pyc
+.pytest_cache/
+.mypy_cache/
+wandb/
+runs/
+results/
+logs/
+checkpoints/
+algorithm/**/log/
+algorithm/**/logs/
+algorithm/**/runs/
+algorithm/**/results/
+algorithm/**/wandb/
+algorithm/**/checkpoints/
+R2DRL/**/log/
+R2DRL/**/logs/
+R2DRL/**/__pycache__/

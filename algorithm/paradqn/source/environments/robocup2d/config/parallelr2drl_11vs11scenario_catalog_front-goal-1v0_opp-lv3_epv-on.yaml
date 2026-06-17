@@ -1,0 +1,78 @@
+env: parallelr2drl
+env_args:
+  host: localhost
+  player_dir: /fsws1/h_qin/robocup/robocup/github/R2DRL/helios-base/src/player
+  player_exe: ./sample_player
+  coach_dir: /fsws1/h_qin/robocup/robocup/github/R2DRL/helios-base/src/coach
+  coach_exe: ./sample_coach
+  server_path: /fsws1/h_qin/robocup/robocup/github/R2DRL/rcssserver/build/rcssserver
+  trainer_dir: /fsws1/h_qin/robocup/robocup/github/R2DRL/helios-base/src/trainer
+  trainer_exe: ./sample_trainer
+  config_dir: /fsws1/h_qin/robocup/robocup/github/R2DRL/helios-base/src/formations-dt
+  player_config: /fsws1/h_qin/robocup/robocup/github/R2DRL/helios-base/src/player.conf
+  logs_dir: ./log
+  coach_port_offset: 2
+  debug_port_offset: 8
+  trainer_port_offset: 1
+  auto_port_start: 6000
+  auto_port_end: 8000
+  auto_port_step: 9
+  aggressive_kill: false
+  lib_paths:
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/librcsc/rcsc/.libs
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/runtime_libs
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/rcssserver/build/rcss/clang
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/rcssserver/build/rcss/conf
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/rcssserver/build/rcss/net
+  - /fsws1/h_qin/robocup/robocup/github/R2DRL/rcssserver/build/rcss/gzip
+  reset_retries: 2
+  goal_x: 52.5
+  goal_y: 7.01
+  HALF_LENGTH: 52.5
+  HALF_WIDTH: 34.0
+  wait_ready_timeout: 300.0
+  playon_timeout: 300.0
+  trainer_ready_timeout_ms: 10000.0
+  ports_wait_timeout: 300.0
+  server_wait_seconds: 300.0
+  text_logging: false
+  benchmark_mode: scenario
+  n: 2
+  episode_limit: 200
+  half_time: 6000000
+  seed: 123
+  game_logging: false
+  use_custom_start: true
+  terminate_on_goal: true
+  reward_on_goal_scored: 1.0
+  reward_on_goal_conceded: 0.0
+  terminate_on_possession_loss: true
+  reward_on_possession_loss: 0.0
+  terminate_on_ball_out: true
+  reward_on_ball_out: 0.0
+  terminate_on_ball_left_half: true
+  reward_on_ball_left_half: 0.0
+  tb: true
+  init_n: 1
+  trajectory_path: /fsws1/h_qin/robocup/robocup/github/R2DRL/robocup2d/trajectories/scenarioes.npz
+  start_catalog_enabled: true
+  start_id: front_goal_1v0
+  start_window_size: 1
+  progress_bucket_count: 1
+  current_target_window_size: 1
+  num_selected_trajectories: 0
+  random_sample: false
+  freeze_non_controlled: true
+  active_right_unums: []
+  team: Base
+  opponent_state: lv3
+  opponent_level: 1.0
+  useMaxEpv: true
+  epv_progress_scale: 2.0
+  tb_log_dir: ./runs/parallelr2drl_11vs11scenario_catalog_front-goal-1v0_opp-lv3_epv-on
+batch_size_run: 5
+test_nepisode: 5
+batch_size: 10
+buffer_size: 128
+buffer_warmup: 20
+train_updates_per_batch: 2

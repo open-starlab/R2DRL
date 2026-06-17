@@ -307,6 +307,12 @@ public:
     void setCatch();
 
     /*!
+      \brief create catch command with explicit relative direction.
+      \param dir catch direction relative to body angle
+    */
+    void setCatch( const AngleDeg & dir );
+
+    /*!
       \brief create move command and its effect with move parameter
       \param x move target point x
       \param y move target point y

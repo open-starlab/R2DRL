@@ -94,6 +94,16 @@ Bhv_SetPlay::execute( PlayerAgent * agent )
 #endif
 
 
+    if ( wm.self().goalie()
+         && wm.gameMode().type() == GameMode::KickOff_
+         && wm.gameMode().side() == wm.ourSide()
+         && wm.ourPlayers().size() <= 1 )
+    {
+        dlog.addText( Logger::TEAM,
+                      __FILE__": solo goalie kick off" );
+        return Bhv_SetPlayKickOff().execute( agent );
+    }
+
     if ( wm.self().goalie() )
     {
         if ( wm.gameMode().type() != GameMode::BackPass_

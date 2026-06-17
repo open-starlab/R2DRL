@@ -329,12 +329,12 @@ SampleTrainer::actionImpl()
     // std::cerr << "=================================================\n";
 
     // 1) 队名未准备好：这里不视为状态机错误，正常 return
-    if (world().teamNameLeft().empty())
+    if (world().teamNameLeft().empty() || world().teamNameRight().empty())
     {
         doTeamNames();
         // std::cerr << "[trainer] teamNameLeft empty -> doTeamNames()\n";
-        if (world().teamNameLeft().empty()) {
-            std::cerr << "[trainer] doTeamNames() but still empty, return.\n";
+        if (world().teamNameLeft().empty() || world().teamNameRight().empty()) {
+            std::cerr << "[trainer] doTeamNames() but team names still empty, return.\n";
             return;
         }
     }

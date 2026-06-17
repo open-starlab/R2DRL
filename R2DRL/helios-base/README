@@ -1,0 +1,7 @@
+Modified HELIOS Base for R2DRL
+==============================
+
+This is the project-specific HELIOS base source used by the R2DRL Python environment. It includes shared-memory player, coach, and trainer changes and should be built together with the matching modified librcsc.
+
+Read README.md in this directory for the current R2DRL-specific notes. The INSTALL file remains the upstream Autotools build reference.
+

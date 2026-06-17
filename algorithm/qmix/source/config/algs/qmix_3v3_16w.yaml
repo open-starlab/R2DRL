@@ -1,0 +1,29 @@
+# --- QMIX parameters for RoboCup 3vs3 with 16 workers ---
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 400000
+
+runner: "parallel"
+
+# 4 train rollout batches per 1 test rollout batch for 3vs3.
+batch_size_run: 16
+test_nepisode: 16
+test_interval: 192000
+train_updates_per_batch: 4
+
+buffer_size: 256
+
+# Scale target updates with the higher rollout/update throughput.
+target_update_interval: 80
+
+agent_output_type: "q"
+learner: "q_learner"
+double_q: True
+mixer: "qmix"
+mixing_embed_dim: 32
+hypernet_layers: 2
+hypernet_embed: 64
+
+name: "qmix_3v3_16w"

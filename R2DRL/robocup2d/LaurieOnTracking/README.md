@@ -1,29 +1,58 @@
-# LaurieOnTracking
-Laurie's code for reading and working with Metrica's tracking and event data.
+# EPV Assets for R2DRL
 
-The sample data can be found in Metrica's github repository here: https://github.com/metrica-sports/sample-data
+This directory contains the EPV data and helper scripts used by the current `robocup2d` environment.
 
-We'll be updating this repo as the friends of tracking series develops, adding code for measuring player velocity and acceleration, measuring team formations, and evaluating pitch control using a model published by Will Spearman. 
+It also keeps the original LaurieOnTracking/Metrica tutorial code that the EPV work was based on, but in this repository the important runtime files are the CSV grids loaded by `robocup2d/agents.py`.
 
-To create movies from the tracking data you'll need to have ffmpeg installed. You can do this by following the instructions here: https://anaconda.org/conda-forge/ffmpeg (you may need to restart python afterwards).
+## Runtime Use
 
+`Agents._load_epv_grid()` looks for `config.epv_grid_file`. If the value is relative, it is resolved inside this directory.
 
-Tutorial Synopsis
------------------
+Current defaults:
 
-Tutorial1: https://www.youtube.com/watch?v=8TrleFklEsE
+- `EPV_grid.csv`: default EPV grid.
+- `EPV_grid_front_goal_linear.csv`: linear front-goal EPV grid used by the `front-goal-1v0_..._epv-linear` preset.
 
-An introduction to working with Metrica Sport's player tracking and event data. Options for visualising the data, and using tracking data to add context to shot maps and passing maps.
+The environment loads EPV grids for diagnostics whenever possible. Reward shaping is active only when YAML has:
 
-Tutorial2: https://www.youtube.com/watch?v=VX3T-4lB2o0
+```yaml
+useMaxEpv: true
+```
 
-Using tracking data to add further context to football analytics. This tutorial covers: making movies from the data, measuring player velocities, and creating physical summary reports for players.
+Related reward fields:
 
+```yaml
+epv_grid_file: EPV_grid.csv
+epv_progress_reward: 0.0
+epv_progress_scale: 1.0
+```
 
-Tutorial3: https://www.youtube.com/watch?v=5X1cSehLg6s
+In the current front-goal EPV presets, `epv_progress_scale` is commonly set to `2.0`.
 
-Building your own pitch control model in python and using it to evaluate a player's passing options. Pitch control measures the probability that a team will retain possession of the ball if they pass it to another location on the field. It can be used to evaluate passing options for a player, and quantify the probability of success.
+## Reward Behavior in Current Code
 
-Tutorial4: https://www.youtube.com/watch?v=KXSLKwADXKI
+- Reset stores the starting EPV as `initial_episode_epv`.
+- `max_episode_epv` tracks the best EPV reached so far.
+- When `useMaxEpv` is true, EPV progress is counted only when the left team is truly kickable.
+- Positive increases in `max_episode_epv` are rewarded.
+- On a scored goal, `complete_episode_epv()` can add the remaining progress up to the grid maximum.
+- If `useMaxEpv` is false, EPV values are still useful diagnostics but do not add shaping reward.
 
-Measuring the quality of player decision-making and valuing their actions. This tutorial introduces the concept of expected possession value (EPV), describes how to use EPV to quantify the value of passes, and demonstrates how you can combine EPV with pitch control to identify the best passing options available to the player on the ball. [The tutorial 4 script also describes other small changes to the codebase].
+## Files
+
+- `EPV_grid.csv`: default grid.
+- `EPV_grid_front_goal_linear.csv`: front-goal linear reward grid.
+- `*.png`: visualizations used to inspect EPV grids and front-goal behavior.
+- `Metrica_EPV.py`, `Metrica_IO.py`, `Metrica_PitchControl.py`, `Metrica_Velocities.py`, `Metrica_Viz.py`: original helper/tutorial modules retained for reference.
+- `Tutorial*.py`: original tutorial scripts.
+
+## Original Reference
+
+The original sample data and tutorial context come from Metrica Sports and Friends of Tracking:
+
+- https://github.com/metrica-sports/sample-data
+- Tutorial 1: https://www.youtube.com/watch?v=8TrleFklEsE
+- Tutorial 2: https://www.youtube.com/watch?v=VX3T-4lB2o0
+- Tutorial 3: https://www.youtube.com/watch?v=5X1cSehLg6s
+- Tutorial 4: https://www.youtube.com/watch?v=KXSLKwADXKI
+

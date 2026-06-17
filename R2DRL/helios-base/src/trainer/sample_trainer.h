@@ -86,13 +86,13 @@ private:
     static constexpr std::size_t T_BALL_VX = T_BALL_Y + sizeof(float);                   // 24
     static constexpr std::size_t T_BALL_VY = T_BALL_VX + sizeof(float);                  // 28
 
-    // players: 22 * (x,y,dir_deg,vx,vy)
+    // players: 22 * (x,y,body_deg,vx,vy)
     static constexpr int N_LEFT    = 11;
     static constexpr int N_RIGHT   = 11;
     static constexpr int N_PLAYERS = N_LEFT + N_RIGHT; // 22
     static constexpr std::size_t PLAYER_STRIDE = 5 * sizeof(float); // 20 bytes
 
-    static constexpr std::size_t T_PLAYERS_BASE = align4_sz(T_BALL_VY + sizeof(float)); // 24
+    static constexpr std::size_t T_PLAYERS_BASE = align4_sz(T_BALL_VY + sizeof(float)); // 32
 
     // 左队 i=0..10
     static inline std::size_t T_LPX(int i){ return T_PLAYERS_BASE + i*PLAYER_STRIDE + 0*sizeof(float); }

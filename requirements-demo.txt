@@ -1,0 +1,13 @@
+# Minimal Python packages used by the bundled demo scripts.
+# The copied algorithm directories keep their original requirements too.
+numpy
+scipy
+PyYAML
+sacred
+pymongo
+tensorboardX
+tensorboard
+gym
+setproctitle
+wandb
+torch

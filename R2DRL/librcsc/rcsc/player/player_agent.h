@@ -248,6 +248,13 @@ public:
     bool doCatch();
 
     /*!
+      \brief register catch command with explicit relative direction.
+      \param dir catch direction relative to body angle
+      \return true if successfully registered.
+    */
+    bool doCatch( const AngleDeg & dir );
+
+    /*!
       \brief register move command
       \param x move target x
       \param y move target y

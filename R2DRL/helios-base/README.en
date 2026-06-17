@@ -1,0 +1,7 @@
+Modified HELIOS Base for R2DRL
+==============================
+
+This copy is not a vanilla upstream HELIOS base checkout. It is the version used by the current R2DRL RoboCup2D environment and contains shared-memory integration for sample_player, sample_coach, and sample_trainer.
+
+See README.md for the current project-specific build and runtime notes.
+

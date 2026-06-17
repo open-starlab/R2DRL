@@ -304,18 +304,10 @@ static inline double relDirToBallDeg(const rcsc::WorldModel & wm){
     return rel_deg;
 }
 
-// 0:TURN, 1:DASH, 2:KICK, 3:CATCH 4：HELIOS 5:TURN_ABS
+// 0:TURN, 1:DASH, 2:KICK, 3:CATCH, 4:HELIOS, 5:WAIT
 // 返回 true 表示本帧已发送了1条身体指令；false 表示没发
 bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
 {
-    const rcsc::WorldModel & wm = this->world();
-    const int cyc = wm.time().cycle();
-
-    const bool frozen    = wm.self().isFrozen();
-    const bool kickable  = wm.self().isKickable();
-    const bool is_goalie = wm.self().goalie();
-
-
     // ---- 仅在本函数内可见的归一化 → 物理量 映射 ----
     auto clamp01 = [](double x)->double {
         double y = std::max(0.0, std::min(1.0, x));
@@ -345,38 +337,35 @@ bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
     switch(a){
         case 0: { // TURN(moment°) ；u0∈[0,1] → [-180,180]°
             const double moment_deg = u_to_deg180(u0);
-            this->doTurn(moment_deg);
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
-            sent = true;
+            sent = this->doTurn(moment_deg);
+            if (sent) {
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+            }
             break;
         }
         case 1: { // DASH
             const double power = 1.0 + 99.0 * clamp01(u0); // [1,100]
-            this->doDash(power);                            // 只给正功率
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
-            sent = true;
+            sent = this->doDash(power);                    // 只给正功率
+            if (sent) {
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+            }
             break;
         }
         case 2: { // KICK(power,dir)；u0→力度, u1→方向（相对身体，度）
-            if (!wm.self().isKickable()) {
-                sent = false;
-                break;
-            }
             const double power   = u_to_kick_power(u0);
             const double dir_deg = u_to_deg180(u1);
-            this->doKick(power, dir_deg);
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
-            sent = true;
+            sent = this->doKick(power, dir_deg);
+            if (sent) {
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
+            }
             break;
         }
-        case 3: { // CATCH(dir)（当前无参 doCatch()）
-            if (!wm.self().goalie()) {
-                sent = false;
-                break;
+        case 3: { // CATCH(dir)；u0→方向（相对身体，度）
+            const double dir_deg = u_to_deg180(u0);
+            sent = this->doCatch(rcsc::AngleDeg(dir_deg));
+            if (sent) {
+                this->setNeckAction(new Neck_TurnToBallOrScan(0));
             }
-            this->doCatch();
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
-            sent = true;
             break;
         }
         // 在 switch(a) 里新增
@@ -392,39 +381,10 @@ bool SamplePlayer::takeHybridAction(int a, double u0, double u1)
             break;
         }
 
-        case 5: { // TURN_ABS: same as discrete action 18 (read OFFSET_BODY_TARGET_DEG)
-            if (!shm_ptr) { sent = false; break; }
-
-            auto* base = static_cast<uint8_t*>(shm_ptr);
-            float* shm_param = reinterpret_cast<float*>(base + OFFSET_BODY_TARGET_DEG);
-            const float target_deg = *shm_param;  // Python 写入的绝对角度（度）
-
-            const double current_body = world().self().body().degree();
-            double moment = double(target_deg) - current_body;
-
-            if (!std::isfinite(target_deg) || !std::isfinite(moment)) {
-                this->doTurn(0.0);
-                this->setViewAction(new View_Tactical());
-                this->setNeckAction(new Neck_TurnToBallOrScan(0));
-                sent = true;
-                break;
-            }
-
-            // wrap 到 [-180, 180]
-            while (moment > 180.0)  moment -= 360.0;
-            while (moment < -180.0) moment += 360.0;
-
-            if (!std::isfinite(moment)) {
-                this->doTurn(0.0);
-                this->setViewAction(new View_Tactical());
-                this->setNeckAction(new Neck_TurnToBallOrScan(0));
-                sent = true;
-                break;
-            }
-
-            this->doTurn(moment);
+        case 5: { // WAIT: trainer reset already sets the absolute body angle.
+            this->doTurn(0.0);
             this->setViewAction(new View_Tactical());
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
+            this->setNeckAction(new Neck_ScanField());
             sent = true;
             break;
         }
@@ -575,12 +535,19 @@ std::array<bool,SamplePlayer::HYBRID_ACTION_NUM> SamplePlayer::getHybridActionMa
 
 
     std::array<bool,SamplePlayer::HYBRID_ACTION_NUM> m{};
-    m[0] = true;                    // TURN: 总是允许
-    m[1] = !frozen;                 // DASH: 冻结时不允许
-    m[2] = (!frozen && kickable);   // KICK: 要能踢球且未冻结
+    if (!frozen && kickable) {
+        m[0] = false;               // TURN: on-ball 时强制交给 KICK 的方向参数处理
+        m[1] = false;               // DASH: on-ball 时避免继续无球/跑动动作
+        m[2] = true;                // KICK: 要能踢球且未冻结
+    }
+    else {
+        m[0] = true;                // TURN: off-ball 时总是允许
+        m[1] = !frozen;             // DASH: 冻结时不允许
+        m[2] = false;               // KICK: 不能踢球时屏蔽
+    }
     m[3] = isDoCatchExecutable();
     m[4] = false;                   // HELIOS: 由 SamplePlayer 内部逻辑控制，不受外部 mask 约束
-    m[5] = false;                   // TURN_ABS: 由 SamplePlayer 内部逻辑控制，不受外部 mask 约束
+    m[5] = false;                   // WAIT: 由 SamplePlayer 内部逻辑控制，不受外部 mask 约束
     return m;
 }
 
@@ -743,29 +710,20 @@ SamplePlayer::actionImpl()
             throw std::runtime_error(oss.str());
         }
 
-        const auto m = getHybridActionMask();
         if (a < 0 || a >= HYBRID_ACTION_NUM) {
             std::ostringstream oss;
             oss << "[Hybrid][ERROR] invalid a=" << a;
             throw std::runtime_error(oss.str());
         }
-        if (a <= 3 && !m[a]) {
-            std::ostringstream oss;
-            oss << "[Hybrid][ERROR] action blocked a=" << a
-                << " mask={" << int(m[0]) << "," << int(m[1]) << ","
-                << int(m[2]) << "," << int(m[3]) << "}";
-            throw std::runtime_error(oss.str());
-        }
 
         if (!takeHybridAction(a, double(u0), double(u1))) {
-            std::ostringstream oss;
-            oss << "[Hybrid][ERROR] takeHybridAction failed a=" << a
-                << " u0=" << u0 << " u1=" << u1
-                << " kickable=" << world().self().isKickable()
-                << " goalie=" << world().self().goalie();
-            throw std::runtime_error(oss.str());
+            if (!world().self().isFrozen()) {
+                this->doTurn(0.0);
+            }
+            this->setViewAction(new View_Tactical());
+            this->setNeckAction(new Neck_ScanField());
         }
-        if (a != 4 && a != 5) {
+        else if (a != 4 && a != 5) {
             this->setNeckAction(new Neck_TurnToBallOrScan(0));
         }
 
@@ -793,28 +751,19 @@ void SamplePlayer::runHeliosMaintenanceAction_()
 {
     const WorldModel & wm = world();
 
-    std::cerr << "[HELIOS][maintenance] time=" << wm.time()
-              << " unum=" << wm.self().unum()
-              << " kickable=" << wm.self().isKickable()
-              << " game_mode=" << wm.gameMode().type()
-              << std::endl;
-
     // 1. 先保留原版 Helios 的 preprocess 链。
     if (doPreprocess()) {
-        std::cerr << "[HELIOS][maintenance] do_preprocess" << std::endl;
         return;
     }
 
     // 2. 持球时只护球。
     if (wm.self().isKickable()) {
-        std::cerr << "[HELIOS][maintenance] hold_ball" << std::endl;
         Body_HoldBall2008().execute(this);
         this->setNeckAction(new Neck_TurnToBallOrScan(0));
         return;
     }
 
     // 3. 否则就按无球跑位处理。
-    std::cerr << "[HELIOS][maintenance] basic_move" << std::endl;
     Bhv_BasicMove().execute(this);
     this->setNeckAction(new Neck_TurnToBallOrScan(0));
 }
@@ -822,12 +771,6 @@ void SamplePlayer::runHeliosMaintenanceAction_()
 void SamplePlayer::runHeliosFrame_()
 {
     const WorldModel & wm = world();
-
-    std::cerr << "[HELIOS][frame] time=" << wm.time()
-              << " unum=" << wm.self().unum()
-              << " kickable=" << wm.self().isKickable()
-              << " game_mode=" << wm.gameMode().type()
-              << std::endl;
 
     // audio hook (keep as-is)
     if (this->audioSensor().trainerMessageTime() == world().time()) {
@@ -843,7 +786,6 @@ void SamplePlayer::runHeliosFrame_()
     ActionChainHolder::instance().setActionGenerator(M_action_generator);
 
     if (doPreprocess()) {
-        std::cerr << "[HELIOS][frame] doPreprocess handled frame" << std::endl;
         return;
     }
 
@@ -859,24 +801,20 @@ void SamplePlayer::runHeliosFrame_()
     }
 
     if (role_ptr->acceptExecution(world())) {
-        std::cerr << "[HELIOS][frame] role execute via acceptExecution" << std::endl;
         role_ptr->execute(this);
         return;
     }
 
     if (world().gameMode().type() == GameMode::PlayOn) {
-        std::cerr << "[HELIOS][frame] role execute in PlayOn" << std::endl;
         role_ptr->execute(this);
         return;
     }
 
     if (world().gameMode().isPenaltyKickMode()) {
-        std::cerr << "[HELIOS][frame] penalty kick behavior" << std::endl;
         Bhv_PenaltyKick().execute(this);
         return;
     }
 
-    std::cerr << "[HELIOS][frame] set play behavior" << std::endl;
     Bhv_SetPlay().execute(this);
     
 
@@ -1803,11 +1741,6 @@ void SamplePlayer::takeAction(int n) {
 
     const int cyc = world().time().cycle();
 
-    std::cerr << "[ACTION][discrete] cycle=" << cyc
-              << " unum=" << wm.self().unum()
-              << " action=" << n
-              << std::endl;
-
     switch (n) {
         case 0: {
             move_behavior.doTackle(this);
@@ -1928,43 +1861,9 @@ void SamplePlayer::takeAction(int n) {
         }
         case 18:
         {
-            if (!shm_ptr) break;
-
-            auto* base = static_cast<uint8_t*>(shm_ptr);
-            float* shm_param =
-                reinterpret_cast<float*>(base + OFFSET_BODY_TARGET_DEG);
-
-            const float target_deg = *shm_param;  // Python 写入的绝对角度
-
-            const double current_body =
-                world().self().body().degree();
-
-            // 计算最短旋转角
-            double moment = target_deg - current_body;
-
-            if (!std::isfinite(target_deg) || !std::isfinite(moment)) {
-                this->doTurn(0.0);
-                this->setViewAction(new View_Tactical());
-                this->setNeckAction(new Neck_TurnToBallOrScan(0));
-                break;
-            }
-
-            // wrap 到 [-180,180]
-            while (moment > 180.0)  moment -= 360.0;
-            while (moment < -180.0) moment += 360.0;
-
-            if (!std::isfinite(moment)) {
-                this->doTurn(0.0);
-                this->setViewAction(new View_Tactical());
-                this->setNeckAction(new Neck_TurnToBallOrScan(0));
-                break;
-            }
-            
-            // std::cout << "[TURN] target=" << target_deg << " current=" << current_body << " moment=" << moment << std::endl;
-            this->doTurn(moment);
-
+            this->doTurn(0.0);
             this->setViewAction(new View_Tactical());
-            this->setNeckAction(new Neck_TurnToBallOrScan(0));
+            this->setNeckAction(new Neck_ScanField());
 
             break;
         }
@@ -1977,7 +1876,12 @@ void SamplePlayer::takeAction(int n) {
     if (!this->effector().bodyCommand() && !world().self().isFrozen()) {
         this->doTurn(0.0);
     }
-    this->setNeckAction(new Neck_TurnToBallOrScan(0));
+    if (n == ACTION_WAIT) {
+        this->setNeckAction(new Neck_ScanField());
+    }
+    else {
+        this->setNeckAction(new Neck_TurnToBallOrScan(0));
+    }
     
 }
 
@@ -2007,8 +1911,8 @@ void SamplePlayer::setActionMask() {
     // 1 射门
     action_mask[1] = isDoShootExecutable();
 
-    // 2 追球：使用现成的 intercept 可执行条件
-    action_mask[2] = move_behavior.isInterceptExcutable(this);
+    // 2 追球：自己已能踢球时不再开放 intercept，避免把控球状态切成追球动作
+    action_mask[2] = !wm.self().isKickable() && move_behavior.isInterceptExcutable(this);
 
     // 3 解围
     // action_mask[3] = advance_ball_action.isExecutable(this);
@@ -2142,9 +2046,6 @@ bool SamplePlayer::initSharedMemory() {
     ok &= need(OFFSET_HYBRID_ACT, sizeof(int32_t), "HYBRID_ACT");
     ok &= need(OFFSET_HYBRID_U0, sizeof(float), "HYBRID_U0");
     ok &= need(OFFSET_HYBRID_U1, sizeof(float), "HYBRID_U1");
-    ok &= need(OFFSET_BODY_TARGET_DEG, sizeof(float), "BODY_TARGET_DEG");
-
-
 
     if (!ok) {
         munmap(shm_ptr, SHM_SIZE);

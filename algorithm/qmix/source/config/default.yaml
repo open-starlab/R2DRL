@@ -1,0 +1,54 @@
+# --- 默认配置 ---
+
+# --- pymarl 选项 ---
+runner: "parallel" # 每次以“整局”的方式运行 1 个环境
+mac: "basic_mac" # 基础多智能体控制器
+env: "parallelr2drl" # 环境名称
+env_args: {} # 传给环境的参数
+batch_size_run: 5 # 并行运行的环境数量
+test_nepisode: 10 # 测试时要跑的 episode 数
+test_interval: 30000 #每经过这么多环境步（timesteps）后进行一次测试
+test50_during_training: False # 若为 True，训练中的测试会按 test50_output_dir 写出 JSON/summary
+test50_episodes: 50 # 打开 test50_during_training 时，至少测试这么多局
+test50_output_dir: "" # 可用 {step} 和 {step_label}，如 checkpoints/{step_label}/test50
+test_greedy: True # 测试时使用贪心策略（若为 False，会把 epsilon 下限设为 0）
+log_interval: 20000 # 每经过这么多步输出一次统计日志
+runner_log_interval: 20000 # 每经过这么多步记录一次 runner（非测试）统计
+learner_log_interval: 20000 # 每经过这么多步记录一次训练统计
+t_max: 1000000000 #训练总步数上限，达到后停止
+use_cuda: True # 默认使用 GPU（若不可用则自动关闭）
+buffer_cpu_only: True # 若为 True，经验回放缓存在 CPU（不全部放到显存）
+
+# --- 日志与持久化选项 ---
+use_tensorboard: true # 是否将结果写入 TensorBoard
+save_model: True # 是否将模型保存到磁盘
+save_model_interval: 200000 #2000000 每经过这么多步保存一次模型
+checkpoint_path: "" # 从该路径加载模型检查点
+evaluate: False # 只评估：运行 test_nepisode 个 episode 后退出（不训练）
+load_step: 0 # 加载训练到该步数的模型（0 表示自动选取最大可用步数）
+
+save_replay: False # 是否保存从 checkpoint_path 加载的模型的对局回放
+local_results_path: "results" # 本地结果保存路径
+
+# --- 强化学习超参数 ---
+gamma: 0.99
+batch_size: 32 # 每次训练采样的 episode 数量
+buffer_size: 256 # 经验回放缓冲区大小（按 episode 计）
+buffer_warmup: 128 # 至少积累这么多条 episode 后才开始训练（建议 >= batch_size）
+lr: 0.0003 # 智能体的学习率
+critic_lr: 0.0003 # 评论家（Critic）的学习率
+optim_alpha: 0.99 # RMSProp 的 alpha 系数
+optim_eps: 0.00001 # RMSProp 的 epsilon
+grad_norm_clip: 10 # 梯度范数裁剪阈值（超过此 L2 范数则缩放）
+train_updates_per_batch: 1 # 每次采样一批并行 episode 后，做多少次 learner 更新
+
+# --- 智能体（Agent）参数 ---
+agent: "rnn" # 默认使用 RNN 智能体
+rnn_hidden_dim: 64 # 默认 RNN 智能体的隐藏状态维度
+obs_agent_id: True # 观测中是否包含智能体的 one-hot 编号
+obs_last_action: True # 观测中是否包含智能体上一时刻的动作（one-hot）
+
+# --- 实验运行参数 ---
+repeat_id: 1
+label: "default_label"
+seed: 42

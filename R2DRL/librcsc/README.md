@@ -1,97 +1,61 @@
+# Modified librcsc for R2DRL
 
-# Librcsc
+This directory is the librcsc source used by the current R2DRL HELIOS build. It is mostly upstream-compatible librcsc, with small project-specific player-agent/action-effector changes required by the current shared-memory action interface.
 
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
+Last documentation refresh: 2026-06-17.
 
-librcsc is a basic library to develop a simulated soccer team and related tools for the RoboCup Soccer Simulation.
-All programs can work with rcssserver-18.
+## Role in R2DRL
 
-- The RoboCup Soccer Simulator: https://rcsoccersim.github.io/
-- RoboCup Official Homepage: https://www.robocup.org/
+`helios-base` links against this library. The Python environment does not import librcsc directly, but launched C++ player, coach, and trainer processes require it at runtime.
 
-## Quick Start
+The Python YAML `lib_paths` field is used to build `LD_LIBRARY_PATH` for child processes. The environment prefers paths ending with:
 
-The latest librcsc depends on the following libraries:
- - C++17
- - Boost 1.41 or later https://www.boost.org/
- - (optional) Doxygen
- - (optional) Graphviz
-
-In the case of Ubuntu 20.04 or later, execute the following commands for installing a basic development environment:
-```
-sudo apt update
-sudo apt install build-essential libboost-all-dev autoconf automake libtool
+```text
+/librcsc/rcsc/.libs
 ```
 
-To build the library, execute commands from the root of source directory:
-```
-./bootstrap
-./configure --disable-unit-test
-make
-```
+because that is the common in-tree Autotools build output location.
 
-Once successfully built, you can install the library file and header files to the default installation directory (``/usr/local``):
-```
-sudo make install
-```
-It is recommended to change the installation directory to the under of your home directory.
-See the next section in detail.
+## Current Project-Specific Changes
 
-You can generate documetation files using Doxygen and Graphviz.
-```
-sudo apt install doxygen graphviz
-make doc
-```
+The current diff touches:
 
+- `rcsc/player/action_effector.cpp`
+- `rcsc/player/action_effector.h`
+- `rcsc/player/player_agent.cpp`
+- `rcsc/player/player_agent.h`
 
-## Configuring
+The important added capability is explicit-direction catch support:
 
-If you do not have an administration privilege, you may need to install the library under your home directory and configure some environment variables.
-You can change the installation directory by passing ``--prefix`` option to the configure script:
-```
-./configure --prefix=/path/to/installation
-```
-For example, if you'd like to install under the ``~/local``, type the following:
-```
-./configure --prefix=$HOME/local
+- `ActionEffector::setCatch(const AngleDeg & dir)`
+- `PlayerAgent::doCatch(const AngleDeg & dir)`
+
+This supports the modified HELIOS/R2DRL action path where goalie catch can be issued with an explicit relative direction, including from the Hybrid action interface.
+
+## Build Notes
+
+The GitHub bundle already includes `rcsc/.libs/librcsc.so.19` for the demo binaries. If rebuilding is needed, use the repository-level helper:
+
+```bash
+cd <repo-root>
+./scripts/build_simulators.sh
+./scripts/prepare_runtime.sh
 ```
 
-See `./configure --help` for other options.
+For local development, installing is optional if `helios-base` can find the headers/libs and runtime `LD_LIBRARY_PATH` includes the build output. YAML `lib_paths` is the main runtime hook.
 
+## Build Order
 
-### Configuring Environment Variables
+1. Build this `librcsc`.
+2. Build `helios-base` against this `librcsc`.
+3. Make sure `robocup2d/config/*.yaml` points to the matching binaries and library paths.
 
-``~/local`` is supported by the configure script of helios-base, soccerwindow2, fedit2 by default.
-However, if you change the installation directory, you need to modify the followng two environment variables:
+## Upstream Reference
 
-- ``LD_LIBRARY_PATH`` (in ``~/.bashrc``)
-- ``PATH`` (in ``~/.profile``)
+librcsc is the basic library for RoboCup Soccer Simulation teams and tools.
 
-The following instructions assume that librcsc was installed under ``~/local``.
+- Upstream: https://github.com/helios-base/librcsc
+- RoboCup simulator: https://rcsoccersim.github.io/
 
-Add the following lines at the end of ``~/.bashrc``:
-```
-LD_LIBRARY_PATH=$HOME/local/lib:$LD_LIBRARY_PATH
-export EDITOR RCSSMONITOR LD_LIBRARY_PATH
-```
-This setting is enabled by opening a new terminal or executing ``source ~/.bashrc``.
+The original upstream `INSTALL` file is still included for detailed Autotools options.
 
-You can find the existing ``PATH`` variable at the end of ``~/.profile``.
-Add the following at the end of the file, then log out and log in again.
-```
-PATH="$HOME/local/bin:$PATH"
-```
-
-## Uninstall
-
-librcsc can also be easily removed by entering the distribution directory and running:
-```
-make uninstall
-```
-This will remove all the files that where installed, but not any directories that were created during the installation process.
-
-
-## References
-
-- Hidehisa Akiyama, Tomoharu Nakashima, HELIOS Base: An Open Source Package for the RoboCup Soccer 2D Simulation, In Sven Behnke, Manuela Veloso, Arnoud Visser, and Rong Xiong editors, RoboCup2013: Robot World XVII, Lecture Notes in Artificial Intelligence, Springer Verlag, Berlin, 2014. http://dx.doi.org/10.1007/978-3-662-44468-9_46
-- Hidehisa Akiyama, Itsuki Noda, Multi-Agent Positioning Mechanism in the Dynamic Environment, In Ubbo Visser, Fernando Ribeiro, Takeshi Ohashi, and Frank Dellaert, editors, RoboCup 2007: Robot Soccer World Cup XI Lecture Notes in Artificial Intelligence, vol. 5001, Springer, pp.377-384, July 2008. https://doi.org/10.1007/978-3-540-68847-1_38

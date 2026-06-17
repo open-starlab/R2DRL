@@ -100,8 +100,7 @@ private:
     static constexpr size_t OFFSET_HYBRID_U0   = align4(OFFSET_HYBRID_ACT + sizeof(int32_t));      // float
     static constexpr size_t OFFSET_HYBRID_U1   = align4(OFFSET_HYBRID_U0 + sizeof(float));         // float
 
-    static constexpr size_t OFFSET_BODY_TARGET_DEG = align4(OFFSET_HYBRID_U1 + sizeof(float));
-    static constexpr size_t SHM_SIZE = align4(OFFSET_BODY_TARGET_DEG + sizeof(float));
+    static constexpr size_t SHM_SIZE = align4(OFFSET_HYBRID_U1 + sizeof(float));
 
 
     std::string RUN_MODE_ = "Helios";   // 只保存原始参数（可留作日志）

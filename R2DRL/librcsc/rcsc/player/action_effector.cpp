@@ -1323,6 +1323,31 @@ ActionEffector::setCatch()
 
 */
 void
+ActionEffector::setCatch( const AngleDeg & dir )
+{
+    const double catch_angle = ServerParam::i().normalizeCatchAngle( dir.degree() );
+
+    dlog.addText( Logger::ACTION,
+                  __FILE__" (setCatch explicit) dir=%.1f catch_angle=%.1f(global=%.1f)",
+                  dir.degree(),
+                  catch_angle,
+                  ( AngleDeg( catch_angle ) + M_agent.world().self().body() ).degree() );
+
+    //////////////////////////////////////////////////
+    // create command object
+    if ( M_command_body )
+    {
+        delete M_command_body;
+        M_command_body = nullptr;
+    }
+    M_command_body = new PlayerCatchCommand( catch_angle );
+}
+
+/*-------------------------------------------------------------------*/
+/*!
+
+*/
+void
 ActionEffector::setTackle( const double & power_or_dir,
                            const bool foul )
 {
