@@ -565,6 +565,7 @@ void SamplePlayer::setHybridActionMask()
 void
 SamplePlayer::actionImpl()
 {
+    wm_trace_.begin(world(), RUN_MODE_, SHM_NAME);
     const int unum = world().self().unum();
     const int cyc = world().time().cycle();
     const int gm  = static_cast<int>(world().gameMode().type());
@@ -669,6 +670,7 @@ SamplePlayer::actionImpl()
         cerr_flags("Base:obs_ready");
 
         const int act = getActionFromSharedMemory(next_obs_seq);
+        wm_trace_.baseAction(act);
         if (0 <= act && act < BASE_ACTION_NUM) {
             takeAction(act);
         } else {
@@ -715,6 +717,8 @@ SamplePlayer::actionImpl()
             oss << "[Hybrid][ERROR] invalid a=" << a;
             throw std::runtime_error(oss.str());
         }
+
+        wm_trace_.hybridAction(a, u0, u1);
 
         if (!takeHybridAction(a, double(u0), double(u1))) {
             if (!world().self().isFrozen()) {
@@ -1081,6 +1085,9 @@ SamplePlayer::communicationImpl()
     {
         M_communication->execute( this );
     }
+    // Neck/view actions have executed; makeCommand() has not deleted the
+    // queued commands yet. Never capture these in handleActionEnd().
+    wm_trace_.end(world(), effector());
 }
 
 
@@ -1879,7 +1886,11 @@ void SamplePlayer::takeAction(int n) {
     if (n == ACTION_WAIT) {
         this->setNeckAction(new Neck_ScanField());
     }
-    else {
+    else if (n != ACTION_HELIOS) {
+        // Native HELIOS chooses a role/body-specific neck action (including
+        // ball-holder tracking, intercept and goalie observation). Replacing
+        // it here discards that choice before PlayerAgent executes it.
+        // Keep the default neck policy for the other discrete RL actions.
         this->setNeckAction(new Neck_TurnToBallOrScan(0));
     }
     

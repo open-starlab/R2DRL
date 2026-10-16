@@ -50,6 +50,20 @@ The current `SamplePlayer::createActionGenerator()` uses `ActGen_StrictCheckPass
 
 Action-chain candidates are evaluated by the HELIOS planner evaluator, while the R2DRL Python side chooses high-level actions through shared memory.
 
+### Native HELIOS observation policy
+
+Base action 17 (`ACTION_HELIOS`, also used by the HELIOS opponent) preserves the
+neck action selected by the native role/behavior. In particular, ball-holder
+tracking, specialized interception observation and goalie observation must not
+be replaced by a generic scan after the native behavior returns. Hybrid action
+4 already preserves this selection. The default `Neck_TurnToBallOrScan(0)` for
+other discrete RL actions, WAIT scanning, and the no-body-command fallback are
+unchanged. This is an intentional runtime behavior correction; historical
+evaluations with the blanket Base override remain historical and must not be
+relabeled as evaluations of the corrected client. It does not change native
+intercept/tackle thresholds, formations, or shot parameters, and is not by
+itself proof of improved defensive performance.
+
 ## Build Notes
 
 The GitHub bundle already includes the runtime binaries used by the demo scripts. If they are incompatible with the target machine, rebuild from the repository root:
@@ -89,6 +103,72 @@ Typical files:
 - `coach_<port>.log`
 - `trainer_<port>.log`
 
+### Optional per-player WorldModel trace
+
+The public client can write **read-only diagnostic snapshots** of the WorldModel
+used by each player. Logging is off by default. Rebuild `sample_player` after
+updating the source (see the build/regression instructions below); an older
+binary does not gain this feature from a source update alone.
+
+Create a dedicated output directory and export these variables **before**
+starting your normal Python environment or demo:
+
+```bash
+mkdir -p /tmp/r2drl-wm-trace
+export R2DRL_WM_TRACE_DIR=/tmp/r2drl-wm-trace
+export R2DRL_WM_TRACE_SIDE=r     # optional: l, r, or all (default)
+export R2DRL_WM_TRACE_EVERY=1    # optional: every N player decisions (default 1)
+```
+
+The Python launcher already passes the parent environment to both teams. Each
+selected player writes its own `wm_<side>_u<unum>_pid<pid>_<timestamp>.jsonl`;
+the player's ordinary log reports the actual path. No trace files are created
+when `R2DRL_WM_TRACE_DIR` is unset or empty. Unset the variables to disable logging.
+A missing/unwritable destination or invalid option emits one warning and
+disables that player's tracing, not its soccer behavior. Logging has I/O cost;
+use only for diagnostics, not latency/throughput measurements.
+
+Each sampled decision has `pre_decision` and `post_decision` rows, joined by
+file, `decision_index`, `cycle`, and `stopped`. Include `stopped`: multiple
+decisions during a restart can share the same server cycle. Sampling is by
+decision count, **not** by server cycle or guaranteed wall-clock frequency.
+
+Rows include:
+
+- Team/side/uniform number, mode, game-mode ID, process ID and source SHM name.
+- Self position/velocity, body/neck/face angles, stamina, validity/age fields,
+  kickability, frozen status and remaining tackle/foul freeze counts.
+- Ball estimates, seen/heard positions, validity and information-age counts.
+- Player estimates present in that player's WM, including their identity,
+  position, velocity, facing and age fields; missing players are not filled
+  from coach/server truth.
+- Predicted self/teammate/opponent intercept steps and first interceptors,
+  kickable teammate/opponent, and self tackle/foul/catch probabilities.
+- Requested Base/Hybrid action and Hybrid parameters, plus queued body,
+  turn-neck and change-view command strings in the post-decision row.
+
+Coordinates are the unmodified **librcsc WorldModel coordinates**, not a promise
+of server/RCG coordinates (the right team's normal-play WM is reversed). Ages
+and validity flags must be used when interpreting stale or unknown estimates.
+Invalid vectors and non-finite numbers are JSON `null`. `foul_probability` is
+librcsc's estimated success probability for the foul-enabled tackle, not the
+probability of receiving a foul/card.
+
+`post_decision` is captured at the end of `communicationImpl`, after neck/view
+actions but **before command composition/transmission**. It is not the next
+server state and does not prove server acceptance or successful execution.
+The sender can synthesize `(turn 0)` for a missing body command when not frozen;
+the trace records the queued command as `null` in that case. Say messages are
+not serialized by this diagnostic logger. Match with RCL/RCG to verify reception
+and movement. The trace records planner inputs and commands, not the exact
+internal branch/call stack or all policy caches.
+
+This is deliberately **not** the real-data import runtime's restorable WM
+snapshot protocol: no restore, fullstate injection, RNG restoration, extra
+actor input or shared-memory ABI change is introduced. Existing fullstate
+settings remain untouched. Use the importer runtime if a restorable state is
+needed. These diagnostics cannot recover WM information absent from old runs.
+
 ## Upstream Reference
 
 HELIOS base is a sample team for the RoboCup Soccer 2D Simulator.
@@ -109,8 +189,9 @@ the field-player policy, action masks, or shooting parameters. Rebuild
 `sample_player` from these sources before using the fix; an existing bundled
 binary is not changed merely by updating the source.
 
-The repository's `tests/CMakeLists.txt` can build the player target and its
-reverse-dash regression test against the bundled librcsc. With Boost installed:
+The repository's `tests/CMakeLists.txt` can build the player target and check
+reverse-dash compatibility, native HELIOS neck dispatch and opt-in WorldModel
+tracing against the bundled librcsc. With Boost installed:
 
 ```bash
 cmake -S tests -B /tmp/r2drl-player-check -DCMAKE_BUILD_TYPE=Release

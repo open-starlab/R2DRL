@@ -118,6 +118,7 @@ sample_player_SOURCES = \
 	main_player.cpp
 
 noinst_HEADERS = \
+    world_model_trace.h \
 	basic_actions/basic_actions.h \
 	basic_actions/arm_off.h \
 	basic_actions/arm_point_to_point.h \

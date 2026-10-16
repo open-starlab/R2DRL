@@ -30,6 +30,7 @@
 #include "action_generator.h"
 #include "field_evaluator.h"
 #include "communication.h"
+#include "world_model_trace.h"
 
 #include <rcsc/player/player_agent.h>
 #include <vector>
@@ -78,6 +79,8 @@ private:
 
     FieldEvaluator::ConstPtr M_field_evaluator;
     ActionGenerator::ConstPtr M_action_generator;
+
+    r2drl::WorldModelTrace wm_trace_;
 
     static constexpr int STATE_NUM = 97;
     static constexpr int HYBRID_ACTION_NUM = 6;
