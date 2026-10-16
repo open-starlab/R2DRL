@@ -324,6 +324,7 @@ class Agents:
         self._epv_last_value = 0.0
         self.current_epv = 0.0
         self.initial_episode_epv = 0.0
+        self.initial_segment_epv = 0.0
         self.max_episode_epv = 0.0
 
     def _make_no_action_mask_avail(self) -> np.ndarray:
@@ -478,8 +479,19 @@ class Agents:
         return value
 
     def reset_episode_epv(self) -> float:
-        self.current_epv = self.get_ball_position_epv()
+        self.rebase_episode_epv()
         self.initial_episode_epv = self.current_epv
+        return self.max_episode_epv
+
+    def rebase_episode_epv(self, position: Tuple[float, float] | None = None) -> float:
+        """Start a reward segment without rewarding the restart/teleport itself.
+
+        ``max_episode_epv`` retains its public name, but is a segment maximum
+        when the environment rebases after an 11v11 goal. The original episode
+        baseline stays available separately as ``initial_episode_epv``.
+        """
+        self.current_epv = self.get_ball_position_epv(position=position)
+        self.initial_segment_epv = self.current_epv
         self.max_episode_epv = self.current_epv
         return self.max_episode_epv
 

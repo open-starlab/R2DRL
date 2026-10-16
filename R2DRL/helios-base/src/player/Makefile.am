@@ -224,6 +224,7 @@ noinst_HEADERS = \
 	bhv_custom_before_kick_off.h \
 	bhv_goalie_basic_move.h \
 	bhv_goalie_chase_ball.h \
+	goalie_dash_compat.h \
 	bhv_goalie_free_kick.h \
 	bhv_penalty_kick.h \
 	neck_default_intercept_neck.h \

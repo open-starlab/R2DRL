@@ -2,7 +2,7 @@
 
 `robocup2d` is the Python environment package used by the current R2DRL/QMix-style RoboCup2D experiments. It wraps a synchronous `rcssserver` session, HELIOS-based player processes, an online coach, and a trainer behind a PyMARL-compatible API.
 
-Last documentation refresh: 2026-06-17.
+Last documentation refresh: 2026-10-16.
 
 ## Entry Points
 
@@ -146,8 +146,8 @@ info: dict
 - `win`, `lose`, `timeout`, `episode_limit`
 - `score_left`, `score_right`, `score_diff`
 - `ball_out`, `ball_left_half`, `possession_loss`
-- `initial_episode_epv`, `max_episode_epv`, `max_epv_improvement`
-- `epv_step_reward`, `epv_goal_completion_reward`, `epv_progress_scale`, `useMaxEpv`
+- `initial_episode_epv`, `initial_segment_epv`, `max_episode_epv`, `max_epv_improvement`
+- `epv_step_reward`, `epv_goal_completion_reward`, `epv_rebased_after_goal`, `epv_progress_scale`, `useMaxEpv`
 - `terminal_reason`
 - `restart_total`, `restart_recent`, `restart_consecutive`
 
@@ -200,6 +200,33 @@ Behavior:
 - Reward is the positive increase in `max_episode_epv`, multiplied by `epv_progress_scale`, unless `epv_progress_reward` is positive, in which case that fixed progress reward is used.
 - On a left-team goal, `complete_episode_epv()` can add the remaining progress from current max EPV to the grid maximum.
 - Goal reward is still `+1`; conceded goal reward is `-1`.
+
+For **11v11** (`n1 == n2 == 11`), either a scored or conceded goal now starts
+a new MaxEPV reward segment inside the same episode. A scored goal first settles
+the old segment's completion reward; then the maximum is rebased to the returned
+ball state's EPV, not blindly set to zero. The goal/restart transition itself
+does not earn an EPV-progress reward. If the coach still reports a non-play-on
+state, progress remains suspended until the first play-on observation, which
+establishes the kickoff baseline without a reward. This does not change the
+episode's score, step count, RNN state or termination policy. Ordinary possession
+changes do **not** reset MaxEPV. Smaller local scenarios retain their existing
+reward semantics.
+
+`initial_episode_epv` remains the original episode baseline. For compatibility,
+the existing field name `max_episode_epv` is retained, but in 11v11 it is now the
+**current segment maximum**. `initial_segment_epv` is that segment's baseline,
+and `max_epv_improvement` is measured against it. `epv_rebased_after_goal` reports
+whether this step rebased the segment (including a deferred play-on rebase).
+This is a prospective reward change; historical checkpoints/results retain
+their original reward definition.
+
+Reward-only regression tests (no simulator processes or training):
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Run from the repository root in an environment with the package dependencies.
 
 Default EPV grid: `LaurieOnTracking/EPV_grid.csv`.
 Front-goal linear variant: `LaurieOnTracking/EPV_grid_front_goal_linear.csv`.

@@ -20,6 +20,9 @@ OFFSET_STATE: Final[int] = 5
 OFFSET_GAMEMODE: Final[int] = 549
 OFFSET_GOAL: Final[int] = OFFSET_GAMEMODE + 4
 
+# rcsc::GameMode::PlayOn, as stored by SampleCoach::writeSharedMemory().
+GAME_MODE_PLAY_ON: Final[int] = 2
+
 
 
 # =========================================================

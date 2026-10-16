@@ -29,6 +29,7 @@
 #endif
 
 #include "bhv_goalie_basic_move.h"
+#include "goalie_dash_compat.h"
 
 #include "bhv_basic_tackle.h"
 #include "neck_goalie_turn_neck.h"
@@ -699,7 +700,13 @@ Bhv_GoalieBasicMove::doGoToMovePoint( PlayerAgent * agent,
             }
         }
 
-        dash_power = ServerParam::i().normalizeDashPower( dash_power );
+        // Convert the signed reverse intention before normalization can clip
+        // it to zero on rcssserver 17+ (min_dash_power = 0).
+        const ServerParam & sp = ServerParam::i();
+        const goalie_dash_compat::Command dash_command = goalie_dash_compat::resolve(
+            dash_power, sp.minDashPower(), sp.maxDashPower(),
+            sp.minDashAngle(), sp.maxDashAngle());
+        dash_power = dash_command.power;
 
         dlog.addText( Logger::TEAM,
                       __FILE__": doGoToMovePoint. CorrectY(1) power= %.1f",
@@ -707,7 +714,7 @@ Bhv_GoalieBasicMove::doGoToMovePoint( PlayerAgent * agent,
         agent->debugClient().addMessage( "CorrectY(1)%.0f", dash_power );
         agent->debugClient().setTarget( move_point );
 
-        agent->doDash( dash_power );
+        agent->doDash( dash_command.power, AngleDeg(dash_command.direction) );
         agent->setNeckAction( new Neck_GoalieTurnNeck() );
     }
     else

@@ -184,6 +184,7 @@ class Robocup2dEnv:
         self.episode_steps = 0
         self.turn_count = 0
         self.score = [0, 0]
+        self._epv_rebase_pending = False
         self._closed = False
         self.episode_limit = self.config.episode_limit
         self.test_mode = False
@@ -533,6 +534,7 @@ class Robocup2dEnv:
             self._sync_control_count()
             self.agents.set_agent_mask()
             self.agents.reset_episode_epv()
+            self._epv_rebase_pending = False
             self._cache_transition_payload()
 
             return {
@@ -540,15 +542,40 @@ class Robocup2dEnv:
                 "score_left": self.score[0],
                 "score_right": self.score[1],
                 "initial_episode_epv": float(self.agents.initial_episode_epv),
+                "initial_segment_epv": float(self.agents.initial_segment_epv),
                 "max_episode_epv": float(self.agents.max_episode_epv),
                 "max_epv_improvement": float(
-                    self.agents.max_episode_epv - self.agents.initial_episode_epv
+                    self.agents.max_episode_epv - self.agents.initial_segment_epv
                 ),
                 "restart_total": int(self._restart_total),
                 "restart_recent": int(self._recent_restart_count()),
             }
 
         raise P.common.ShmProtocolError("Reset failed after all restart retries")
+
+    def _transition_epv_rewards(self, goal, position):
+        """Settle a goal before rebasing the 11v11 reward segment.
+
+        A latched goal can arrive with a post-kickoff observation. Do not count
+        that discontinuity as EPV progress. If the coach still reports a
+        non-play_on state, rebase again on the first play_on observation.
+        """
+        is_11v11 = int(self.config.n1) == 11 and int(self.config.n2) == 11
+        goal_boundary = is_11v11 and goal in (-1, 1)
+        pending = is_11v11 and self._epv_rebase_pending
+        epv_reward = (
+            0.0 if goal_boundary or pending
+            else float(self.agents.update_episode_epv(position=position))
+        )
+        completion = float(self.agents.complete_episode_epv()) if goal == 1 else 0.0
+        rebased = False
+        if goal_boundary or pending:
+            play_on = self.agents.coach.gamemode() == P.coach.GAME_MODE_PLAY_ON
+            if goal_boundary or play_on:
+                self.agents.rebase_episode_epv(position=position)
+                rebased = True
+            self._epv_rebase_pending = not play_on
+        return epv_reward, completion, rebased
 
     def step(self, actions):
         self.episode_steps += 1
@@ -573,8 +600,9 @@ class Robocup2dEnv:
         ball = self.agents.coach.ball(copy=False)
         ball_x = float(ball[0])
         ball_y = float(ball[1])
-        epv_reward = float(self.agents.update_episode_epv(position=(ball_x, ball_y)))
-        epv_completion_reward = 0.0
+        epv_reward, epv_completion_reward, epv_rebased = self._transition_epv_rewards(
+            goal, (ball_x, ball_y)
+        )
         ball_out_of_bounds = self._is_ball_out_of_bounds(ball_x, ball_y)
         ball_left_half_now = self._is_ball_left_half(ball_x)
         reward = epv_reward
@@ -587,7 +615,6 @@ class Robocup2dEnv:
         prev_score_right = int(self.score[1])
 
         if goal == 1:
-            epv_completion_reward = float(self.agents.complete_episode_epv())
             reward += epv_completion_reward
             reward += 1.0
             self.score[0] += 1
@@ -665,12 +692,14 @@ class Robocup2dEnv:
             "ball_left_half": ball_left_half,
             "possession_loss": possession_loss,
             "initial_episode_epv": float(self.agents.initial_episode_epv),
+            "initial_segment_epv": float(self.agents.initial_segment_epv),
             "max_episode_epv": float(self.agents.max_episode_epv),
             "max_epv_improvement": float(
-                self.agents.max_episode_epv - self.agents.initial_episode_epv
+                self.agents.max_episode_epv - self.agents.initial_segment_epv
             ),
             "epv_step_reward": float(epv_reward),
             "epv_goal_completion_reward": float(epv_completion_reward),
+            "epv_rebased_after_goal": int(epv_rebased),
             "epv_progress_scale": float(getattr(self.config, "epv_progress_scale", 1.0)),
             "useMaxEpv": int(self.config.useMaxEpv),
             "terminal_reason": terminal_reason,
@@ -729,9 +758,10 @@ class Robocup2dEnv:
             "score_right": int(self.score[1]),
             "score_diff": int(self.score[0] - self.score[1]),
             "initial_episode_epv": float(self.agents.initial_episode_epv),
+            "initial_segment_epv": float(self.agents.initial_segment_epv),
             "max_episode_epv": float(self.agents.max_episode_epv),
             "max_epv_improvement": float(
-                self.agents.max_episode_epv - self.agents.initial_episode_epv
+                self.agents.max_episode_epv - self.agents.initial_segment_epv
             ),
             "restart_total": int(self._restart_total),
             "restart_recent": int(self._recent_restart_count()),

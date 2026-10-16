@@ -29,6 +29,7 @@
 #endif
 
 #include "bhv_goalie_chase_ball.h"
+#include "goalie_dash_compat.h"
 
 #include "bhv_goalie_basic_move.h"
 #include "bhv_basic_tackle.h"
@@ -247,6 +248,22 @@ Bhv_GoalieChaseBall::doGoToCatchPoint( PlayerAgent * agent,
     // back dash
     else if ( rel_angle.abs() > 180.0 - angle_buf )
     {
+        if (SP.minDashPower() >= 0.0
+            && goalie_dash_compat::supports_directional_reverse(
+                SP.minDashAngle(), SP.maxDashAngle()))
+        {
+            const double available = std::max(
+                0.0, wm.self().stamina() + wm.self().playerType().extraStamina());
+            const goalie_dash_compat::Command command = goalie_dash_compat::resolve(
+                -std::min(available, SP.maxDashPower()),
+                SP.minDashPower(), SP.maxDashPower(),
+                SP.minDashAngle(), SP.maxDashAngle());
+            agent->debugClient().addMessage( "GoToCatch:BackDirectional" );
+            agent->doDash(command.power, AngleDeg(command.direction));
+            agent->setNeckAction(new Neck_TurnToBall());
+            return;
+        }
+
         dash_power = SP.minDashPower();
 
         double required_stamina = ( SP.minDashPower() < 0.0

@@ -2,7 +2,7 @@
 
 This directory is the HELIOS base source used by the current R2DRL RoboCup2D environment. It is not a vanilla upstream copy: player, coach, and trainer code have been adapted to communicate with Python through shared memory.
 
-Last documentation refresh: 2026-06-17.
+Last documentation refresh: 2026-10-16.
 
 ## Role in R2DRL
 
@@ -97,4 +97,38 @@ HELIOS base is a sample team for the RoboCup Soccer 2D Simulator.
 - RoboCup simulator: https://github.com/rcsoccersim/
 
 The original upstream build information is still useful, but this project-specific README is the authoritative guide for how this copy is used inside R2DRL.
+
+## Goalkeeper reverse-dash compatibility
+
+The goalkeeper Y-adjustment and backward catch-point branches support servers
+with `min_dash_power = 0` (rcssserver 17+). A reverse intention is sent as
+positive power with a body-relative dash direction of 180 degrees, rather than
+being clipped to `dash 0`. Negative-power behavior is retained on older servers
+that permit it. This client-side fix does not change server dash/catch physics,
+the field-player policy, action masks, or shooting parameters. Rebuild
+`sample_player` from these sources before using the fix; an existing bundled
+binary is not changed merely by updating the source.
+
+The repository's `tests/CMakeLists.txt` can build the player target and its
+reverse-dash regression test against the bundled librcsc. With Boost installed:
+
+```bash
+cmake -S tests -B /tmp/r2drl-player-check -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/r2drl-player-check -j2
+ctest --test-dir /tmp/r2drl-player-check --output-on-failure
+```
+
+Run these commands from the repository root. If Boost is in a nonstandard
+location, pass `-DBOOST_ROOT=/path/to/boost/prefix` when configuring. The rebuilt
+player is `/tmp/r2drl-player-check/bin/sample_player`; building does not install
+it over the existing runtime binary. Preserve that binary before installing the
+replacement at `R2DRL/helios-base/src/player/sample_player`.
+
+CTest also checks `sample_player --help` with the **bundled** runtime libraries,
+without connecting to a server. A successful build alone does not establish
+runtime-library compatibility. In particular, if GCC 13 produces a
+`GLIBCXX_3.4.32` dependency unavailable in the bundled `libstdc++.so.6`, configure
+a fresh build directory with `-DCMAKE_CXX_COMPILER=g++-10` (when installed), and
+rerun CTest before installing the binary. Do not replace bundled libraries just
+to bypass this check.
 
